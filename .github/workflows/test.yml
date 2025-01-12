@@ -33,6 +33,14 @@ jobs:
           mkdir -p Payload/Runner.app/Frameworks
           cp -r Payload/Runner.app ./Runner.app
           plutil -convert xml1 Runner.app/Info.plist
+          
+          # Verify app contents
+          echo "App contents:"
+          ls -la Runner.app/
+          
+          # Display bundle identifier
+          echo "Bundle identifier:"
+          plutil -p Runner.app/Info.plist | grep CFBundleIdentifier
 
       - name: Setup iOS Simulator
         run: |
@@ -44,11 +52,24 @@ jobs:
           xcrun simctl boot "$UDID"
           echo "SIMULATOR_UDID=$UDID" >> $GITHUB_ENV
           
-          # Wait for simulator to boot
-          sleep 10
+          # Wait longer for simulator to fully boot
+          echo "Waiting for simulator to boot..."
+          sleep 20
           echo "Simulator booted with UDID: $UDID"
 
+      - name: Setup Simulator Permissions
+        run: |
+          # Get bundle ID from Info.plist
+          BUNDLE_ID=$(plutil -p ios-app/Runner.app/Info.plist | grep CFBundleIdentifier | awk -F'"' '{print $4}')
+          echo "Setting up permissions for bundle ID: $BUNDLE_ID"
+          
+          # Grant all necessary permissions
+          xcrun simctl privacy $SIMULATOR_UDID grant all $BUNDLE_ID
+          xcrun simctl privacy $SIMULATOR_UDID grant notification $BUNDLE_ID
+          xcrun simctl status_bar $SIMULATOR_UDID clear
+
       - name: Install and Test App
+        id: test
         run: |
           echo "Installing app on simulator..."
           xcrun simctl install $SIMULATOR_UDID ios-app/Runner.app || {
@@ -58,12 +79,26 @@ jobs:
             exit 1
           }
           
+          # Verify bundle identifier
+          BUNDLE_ID=$(plutil -p ios-app/Runner.app/Info.plist | grep CFBundleIdentifier | awk -F'"' '{print $4}')
+          echo "Bundle ID: $BUNDLE_ID"
+          
+          echo "Verifying app container..."
+          xcrun simctl get_app_container $SIMULATOR_UDID $BUNDLE_ID || {
+            echo "Failed to find app container"
+            exit 1
+          }
+          
           echo "Launching app..."
-          xcrun simctl launch $SIMULATOR_UDID com.hebrons.appointments
+          xcrun simctl launch --console-pty $SIMULATOR_UDID $BUNDLE_ID || {
+            echo "Launch failed. System log:"
+            xcrun simctl spawn $SIMULATOR_UDID log show --predicate 'processImagePath contains "Runner"' --last 1m
+            exit 1
+          }
           
           # Capture logs
           mkdir -p test-results
-          xcrun simctl spawn $SIMULATOR_UDID log stream --predicate 'processImagePath contains "appointments"' > test-results/app.log &
+          xcrun simctl spawn $SIMULATOR_UDID log stream --predicate 'processImagePath contains "Runner"' > test-results/app.log &
           LOG_PID=$!
           
           # Monitor app
@@ -71,18 +106,34 @@ jobs:
           sleep 30
           
           # Capture system log
-          xcrun simctl spawn $SIMULATOR_UDID log show --predicate 'processImagePath contains "appointments"' > test-results/system.log
+          xcrun simctl spawn $SIMULATOR_UDID log show --predicate 'processImagePath contains "Runner"' > test-results/system.log
           
           # Check app status
           if xcrun simctl spawn $SIMULATOR_UDID ps aux | grep -q "[R]unner"; then
             echo "✅ App is running successfully"
-            echo "::set-output name=test_status::success"
+            echo "test_status=success" >> $GITHUB_OUTPUT
           else
             echo "❌ App crashed or failed to launch"
             cat test-results/system.log
-            echo "::set-output name=test_status::failure"
+            echo "test_status=failure" >> $GITHUB_OUTPUT
             exit 1
           fi
+
+      - name: Debug Info
+        if: failure()
+        run: |
+          echo "Simulator status:"
+          xcrun simctl list devices | grep "iPhone 14"
+          
+          echo "App installation status:"
+          BUNDLE_ID=$(plutil -p ios-app/Runner.app/Info.plist | grep CFBundleIdentifier | awk -F'"' '{print $4}')
+          xcrun simctl get_app_container $SIMULATOR_UDID $BUNDLE_ID || echo "App container not found"
+          
+          echo "System log:"
+          xcrun simctl spawn $SIMULATOR_UDID log show --last 2m
+          
+          echo "App entitlements:"
+          codesign -d --entitlements :- ios-app/Runner.app
 
       - name: Capture Screenshots
         if: always()
