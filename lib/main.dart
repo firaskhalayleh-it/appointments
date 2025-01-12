@@ -11,32 +11,37 @@ import 'app/services/appointments_service.dart';
 import 'app/routes/app_pages.dart';
 
 void main() async {
+  // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    // Initialize Firebase
+    // Initialize Firebase with error handling
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    // Initialize Flutter Secure Storage
+    // Initialize other services
     final secureStorage = const FlutterSecureStorage();
     Get.put<FlutterSecureStorage>(secureStorage);
-
-    // Initialize Services
     Get.put<ThemeController>(ThemeController());
     Get.put<AppointmentsService>(AppointmentsService());
 
-    // Run the app
     runApp(const MyApp());
-  } catch (e, stacktrace) {
-    print('Error during app initialization: $e');
-    print(stacktrace);
-    // Show a proper error screen
+  } catch (e, stackTrace) {
+    print('Error during initialization: $e');
+    print('Stack trace: $stackTrace');
+
+    // Run a minimal app that shows the error
     runApp(MaterialApp(
       home: Scaffold(
         body: Center(
-          child: Text('Failed to initialize app: $e'),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Text(
+              'Application initialization error. Please try again.\nError: $e',
+              textAlign: TextAlign.center,
+            ),
+          ),
         ),
       ),
     ));
