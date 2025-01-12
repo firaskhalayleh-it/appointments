@@ -11,12 +11,17 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      # Updated Flutter version to 3.27.1
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.27.1'
           channel: 'stable'
+          
+      # Verify Flutter installation and path
+      - name: Verify Flutter Installation
+        run: |
+          flutter doctor -v
+          echo "FLUTTER_ROOT=$FLUTTER_ROOT" >> $GITHUB_ENV
           
       # STEP 1: Detect iOS SDK version
       - name: Find iOS SDK version
@@ -26,40 +31,11 @@ jobs:
           echo "Found iOS SDK version: $ios_sdk"
           echo "sdk_version=$ios_sdk" >> $GITHUB_OUTPUT
           
-      # STEP 2: Update Podfile Platform
-      - name: Update Podfile Platform
-        run: |
-          IOS_SDK_VERSION="${{ steps.find-ios-sdk.outputs.sdk_version }}"
-          if [ -z "$IOS_SDK_VERSION" ]; then
-            echo "No iOS SDK version found. Skipping Podfile update..."
-          else
-            sed -i.bak "s/^platform :ios, .*/platform :ios, '$IOS_SDK_VERSION'/" ios/Podfile || true
-            cat ios/Podfile
-          fi
-          
-      # CACHE STEP #1: Cache Flutter/Dart packages
-      - name: Cache pub dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.pub-cache
-          key: ${{ runner.os }}-pubcache-${{ hashFiles('pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pubcache-
-            
       - name: Flutter Pub Get
-        run: flutter pub get
-        
-      # Optional: Show iOS SDKs for debugging
-      - name: Show iOS SDKs
-        run: xcodebuild -showsdks
-        
-      # Use script to ensure test directory
-      - name: Ensure test directory
         run: |
-          chmod +x setup_tests.sh
-          ./setup_tests.sh
-        shell: bash
-        
+          flutter clean
+          flutter pub get
+          
       # Run Flutter tests
       - name: Run Flutter Tests
         run: flutter test
@@ -71,16 +47,18 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      # Updated Flutter version to 3.27.1
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.27.1'
           channel: 'stable'
           
-      - name: Print Flutter Root
-        run: echo "Flutter root is set to $FLUTTER_ROOT"
-        
+      # Verify Flutter installation and path
+      - name: Verify Flutter Installation
+        run: |
+          flutter doctor -v
+          echo "FLUTTER_ROOT=$FLUTTER_ROOT" >> $GITHUB_ENV
+          
       - name: Setup Ruby and CocoaPods
         uses: ruby/setup-ruby@v1
         with:
@@ -90,35 +68,30 @@ jobs:
       - name: Install CocoaPods
         run: gem install cocoapods
         
-      - name: Cache CocoaPods Installation
-        uses: actions/cache@v3
-        with:
-          path: ios/Pods
-          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pods-
-            
-      - name: Flutter Pub Get
-        run: flutter pub get
-        
+      - name: Flutter Pub Get and Pod Setup
+        run: |
+          flutter clean
+          flutter pub get
+          
       - name: Pod Install
-        run: pod install
-        working-directory: ios
+        run: |
+          cd ios
+          rm -rf Pods Podfile.lock
+          pod install --repo-update
         
       - name: Build iOS Release
         run: flutter build ios --release --no-codesign
         
       - name: Create Payload Directory
-        run: mkdir Payload
-        working-directory: build/ios/iphoneos
+        run: mkdir -p build/ios/iphoneos/Payload
         
       - name: Move App into Payload
-        run: mv Runner.app Payload
-        working-directory: build/ios/iphoneos
+        run: mv build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
         
       - name: Zip IPA
-        run: zip -qq -r -9 FlutterIpaExport.ipa Payload
-        working-directory: build/ios/iphoneos
+        run: |
+          cd build/ios/iphoneos
+          zip -r FlutterIpaExport.ipa Payload
         
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
