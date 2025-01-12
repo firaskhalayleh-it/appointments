@@ -132,7 +132,7 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: build/ios/iphoneos/FlutterIpaExport.ipa
-          tag: v1.5
+          tag: v1.5.1
           overwrite: true
           body: "Built with auto-detected iOS SDK version"
 
