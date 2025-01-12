@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'firebase_options.dart'; // Add this import
 
 import 'app/services/appointments_service.dart';
 import 'app/routes/app_pages.dart';
@@ -14,7 +15,9 @@ void main() async {
 
   try {
     // Initialize Firebase
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
 
     // Initialize Flutter Secure Storage
     final secureStorage = const FlutterSecureStorage();
@@ -22,14 +25,21 @@ void main() async {
 
     // Initialize Services
     Get.put<ThemeController>(ThemeController());
+    Get.put<AppointmentsService>(AppointmentsService());
 
     // Run the app
     runApp(const MyApp());
-    Get.put<AppointmentsService>(AppointmentsService());
   } catch (e, stacktrace) {
     print('Error during app initialization: $e');
     print(stacktrace);
-    // Optionally, show an error screen or alert
+    // Show a proper error screen
+    runApp(MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Text('Failed to initialize app: $e'),
+        ),
+      ),
+    ));
   }
 }
 
@@ -62,7 +72,8 @@ class MyApp extends StatelessWidget {
           home: Scaffold(
             body: Center(
               child: Text(
-                'Something went wrong. Please restart the app.'.tr, // Translation applied
+                'Something went wrong. Please restart the app.'
+                    .tr, // Translation applied
                 style: const TextStyle(fontSize: 18),
               ),
             ),
