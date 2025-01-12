@@ -111,6 +111,20 @@ jobs:
       - name: Install and Test App
         id: test
         run: |
+          # Verify simulator state before installation
+          echo "Verifying simulator state..."
+          SIM_STATE=$(xcrun simctl list devices | grep "$SIMULATOR_UDID" | awk '{print $NF}' | tr -d '()')
+          if [ "$SIM_STATE" != "Booted" ]; then
+            echo "Simulator not in proper state: $SIM_STATE. Attempting to fix..."
+            xcrun simctl shutdown $SIMULATOR_UDID || true
+            xcrun simctl boot $SIMULATOR_UDID
+            sleep 15
+          fi
+          
+          # Clear any existing installation
+          echo "Removing any existing app installation..."
+          xcrun simctl uninstall $SIMULATOR_UDID $BUNDLE_ID || true
+          
           echo "Installing app on simulator..."
           xcrun simctl install $SIMULATOR_UDID ios-app/Runner.app || {
             echo "Installation failed. Directory contents:"
@@ -129,11 +143,44 @@ jobs:
             exit 1
           }
           
-          echo "Launching app..."
-          xcrun simctl launch --console-pty $SIMULATOR_UDID $BUNDLE_ID || {
-            echo "Launch failed. System log:"
-            xcrun simctl spawn $SIMULATOR_UDID log show --predicate 'processImagePath contains "Runner"' --last 1m
-            exit 1
+          # Verify app signing and entitlements
+          echo "Checking app signing and entitlements..."
+          codesign -vv -d ios-app/Runner.app 2>&1 || echo "Warning: Code signing verification failed"
+          
+          # Check app executable permissions
+          echo "Checking app executable permissions..."
+          chmod +x ios-app/Runner.app/Runner
+          
+          # List all installed apps to verify our app is there
+          echo "Listing installed apps..."
+          xcrun simctl listapps $SIMULATOR_UDID
+          
+          # Try alternate launch methods
+          echo "Attempting app launch (Method 1)..."
+          xcrun simctl launch $SIMULATOR_UDID $BUNDLE_ID || {
+            echo "First launch attempt failed, trying alternate method..."
+            
+            # Reset simulator state
+            echo "Resetting simulator state..."
+            xcrun simctl shutdown $SIMULATOR_UDID || true
+            xcrun simctl boot $SIMULATOR_UDID
+            sleep 15
+            
+            echo "Attempting app launch (Method 2)..."
+            xcrun simctl openurl $SIMULATOR_UDID "hebrons-appointments://" || {
+              echo "Second launch attempt failed, trying final method..."
+              
+              echo "Attempting app launch (Method 3)..."
+              open -a Simulator
+              sleep 5
+              xcrun simctl launch $SIMULATOR_UDID $BUNDLE_ID || {
+                echo "All launch attempts failed. System log:"
+                xcrun simctl spawn $SIMULATOR_UDID log show --predicate 'processImagePath contains "Runner"' --last 2m
+                echo "Simulator status:"
+                xcrun simctl list devices | grep "$SIMULATOR_UDID"
+                exit 1
+              }
+            }
           }
           
           # Capture logs
