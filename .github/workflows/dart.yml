@@ -137,60 +137,6 @@ jobs:
           body: "Built with auto-detected iOS SDK version"
 
   # --- Job 3: Test IPA on Simulator ---
-  test-ipa:
-    name: 🧪 Test IPA on Simulator
-    needs: build-ios
-    runs-on: macos-latest
-    steps:
-      - name: Download IPA
-        uses: actions/download-artifact@v3
-        with:
-          name: ios-app
-          path: ios-app
+  # Previous jobs remain the same (test-and-check and build-ios)
 
-      - name: Setup iOS Simulator
-        run: |
-          # Create and boot iPhone 14 simulator
-          UDID=$(xcrun simctl create "iPhone 14" com.apple.CoreSimulator.SimDeviceType.iPhone-14 com.apple.CoreSimulator.SimRuntime.iOS-17-0)
-          xcrun simctl boot "$UDID"
-          echo "SIMULATOR_UDID=$UDID" >> $GITHUB_ENV
-          
-          # Wait for simulator to fully boot
-          sleep 10
-
-      - name: Install and Test App
-        run: |
-          echo "Installing app on simulator..."
-          xcrun simctl install $SIMULATOR_UDID ios-app/FlutterIpaExport.ipa
-          
-          echo "Launching app..."
-          xcrun simctl launch $SIMULATOR_UDID com.hebrons.appointments
-          
-          # Start logging
-          echo "Starting log capture..."
-          xcrun simctl spawn $SIMULATOR_UDID log stream --predicate 'processImagePath contains "appointments"' > app.log &
-          LOG_PID=$!
-          
-          # Monitor app for 30 seconds
-          echo "Monitoring app for 30 seconds..."
-          sleep 30
-          
-          # Check if app is still running
-          if xcrun simctl spawn $SIMULATOR_UDID ps aux | grep -q "appointments"; then
-            echo "✅ App is running successfully"
-            kill $LOG_PID
-            exit 0
-          else
-            echo "❌ App crashed or failed to launch"
-            kill $LOG_PID
-            exit 1
-          fi
-
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: test-logs
-          path: |
-            app.log
-            ~/Library/Logs/CoreSimulator/**/system.log
+  

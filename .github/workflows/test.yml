@@ -1,0 +1,115 @@
+name: iOS-Test-Simulator
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Version tag to test (e.g., v1.5)'
+        required: true
+        default: 'latest'
+
+jobs:
+  test-on-simulator:
+    name: 🧪 Test IPA on iOS Simulator
+    runs-on: macos-latest
+    steps:
+      - name: Download Release IPA
+        run: |
+          if [ "${{ github.event.inputs.version_tag }}" == "latest" ]; then
+            # Get latest release
+            RELEASE_URL=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.assets[0].browser_download_url')
+          else
+            # Get specific version
+            RELEASE_URL=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.event.inputs.version_tag }} | jq -r '.assets[0].browser_download_url')
+          fi
+          
+          mkdir -p ios-app
+          curl -L -o ios-app/FlutterIpaExport.ipa "$RELEASE_URL"
+
+      - name: Extract IPA and Prepare for Simulator
+        run: |
+          cd ios-app
+          unzip FlutterIpaExport.ipa
+          mkdir -p Payload/Runner.app/Frameworks
+          cp -r Payload/Runner.app ./Runner.app
+          plutil -convert xml1 Runner.app/Info.plist
+
+      - name: Setup iOS Simulator
+        run: |
+          # List available runtimes and devices
+          xcrun simctl list
+          
+          # Create and boot iPhone 14 simulator
+          UDID=$(xcrun simctl create "iPhone 14" com.apple.CoreSimulator.SimDeviceType.iPhone-14 com.apple.CoreSimulator.SimRuntime.iOS-17-0)
+          xcrun simctl boot "$UDID"
+          echo "SIMULATOR_UDID=$UDID" >> $GITHUB_ENV
+          
+          # Wait for simulator to boot
+          sleep 10
+          echo "Simulator booted with UDID: $UDID"
+
+      - name: Install and Test App
+        run: |
+          echo "Installing app on simulator..."
+          xcrun simctl install $SIMULATOR_UDID ios-app/Runner.app || {
+            echo "Installation failed. Directory contents:"
+            ls -la ios-app/
+            ls -la ios-app/Runner.app/
+            exit 1
+          }
+          
+          echo "Launching app..."
+          xcrun simctl launch $SIMULATOR_UDID com.hebrons.appointments
+          
+          # Capture logs
+          mkdir -p test-results
+          xcrun simctl spawn $SIMULATOR_UDID log stream --predicate 'processImagePath contains "appointments"' > test-results/app.log &
+          LOG_PID=$!
+          
+          # Monitor app
+          echo "Monitoring app for 30 seconds..."
+          sleep 30
+          
+          # Capture system log
+          xcrun simctl spawn $SIMULATOR_UDID log show --predicate 'processImagePath contains "appointments"' > test-results/system.log
+          
+          # Check app status
+          if xcrun simctl spawn $SIMULATOR_UDID ps aux | grep -q "[R]unner"; then
+            echo "✅ App is running successfully"
+            echo "::set-output name=test_status::success"
+          else
+            echo "❌ App crashed or failed to launch"
+            cat test-results/system.log
+            echo "::set-output name=test_status::failure"
+            exit 1
+          fi
+
+      - name: Capture Screenshots
+        if: always()
+        run: |
+          xcrun simctl io $SIMULATOR_UDID screenshot test-results/final_state.png
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: |
+            test-results/*
+            ios-app/Runner.app/Info.plist
+
+      - name: Clean Up
+        if: always()
+        run: |
+          xcrun simctl shutdown $SIMULATOR_UDID
+          xcrun simctl delete $SIMULATOR_UDID
+
+      - name: Report Test Status
+        if: always()
+        run: |
+          if [ "${{ steps.test.outputs.test_status }}" == "success" ]; then
+            echo "Test completed successfully! ✅"
+          else
+            echo "Test failed! ❌"
+            exit 1
+          fi
