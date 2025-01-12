@@ -53,7 +53,9 @@ jobs:
 
       # Use script to ensure test directory
       - name: Ensure test directory
-        run: ./setup_tests.sh
+        run: |
+         chmod +x setup_tests.sh
+         ./setup_tests.sh
         shell: bash
 
       # Run Flutter tests
