@@ -39,7 +39,7 @@ Pod::Spec.new do |s|
     }
     s.author                = { 'Flutter Dev Team' => 'flutter-dev@googlegroups.com' }
     s.source                = { :git => 'https://github.com/flutter/engine', :tag => s.version.to_s }
-    s.ios.deployment_target = '11.0'
+    s.ios.deployment_target = '13.0'
     s.vendored_frameworks   = 'Flutter.framework'
     s.prepare_command       = <<-CMD
   unzip Flutter.framework -d Flutter.framework
