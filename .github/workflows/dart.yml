@@ -11,7 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: flutter/flutter-action@v2
+      - name: Setup Flutter
+        uses: flutter/setup-flutter@v2
         with:
           channel: stable
 
@@ -42,9 +43,6 @@ jobs:
           key: ${{ runner.os }}-pubcache-${{ hashFiles('pubspec.lock') }}
           restore-keys: ${{ runner.os }}-pubcache-
 
-      - name: Clean Flutter Build
-        run: flutter clean
-
       - name: Flutter Pub Get
         run: flutter pub get
 
@@ -70,7 +68,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: flutter/flutter-action@v2
+      - name: Setup Flutter
+        uses: flutter/setup-flutter@v2
         with:
           channel: stable
 
