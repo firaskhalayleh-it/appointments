@@ -4,9 +4,57 @@ on:
   workflow_dispatch:
 
 jobs:
+  # --- Job 1: Run tests, check iOS version, etc. ---
+  test-and-check:
+    name: ✅ Test and iOS Version Check
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          architecture: x64
+
+      # -------------------------------------------------------------
+      # CACHE STEP #1: Cache Flutter/Dart packages (~/.pub-cache)
+      # -------------------------------------------------------------
+      - name: Cache pub dependencies
+        uses: actions/cache@v3
+        with:
+          # We cache the pub cache folder using a unique key derived from pubspec.lock
+          path: |
+            ~/.pub-cache
+          key: ${{ runner.os }}-pubcache-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pubcache-
+
+      - name: Flutter Pub Get
+        run: flutter pub get
+
+      # Optional: Check iOS SDK versions, simulator versions, etc.
+      - name: Show iOS SDKs
+        run: xcodebuild -showsdks
+
+      # Run your Flutter unit/UI tests at the Dart/Flutter level
+      - name: Run Flutter Tests
+        run: flutter test
+
+      #
+      # In your ios/Podfile, you might specify:
+      #
+      #   # ios/Podfile
+      #   platform :ios, '12.0'
+      #
+      # This ensures the app is built for iOS 12.0 and above.
+      #
+
+  # --- Job 2: Build and export IPA ---
   build-ios:
     name: 🎉 iOS Build
     runs-on: macos-latest
+    needs: test-and-check   # Ensures this job only runs if tests pass
     steps:
       - uses: actions/checkout@v3
 
@@ -14,14 +62,36 @@ jobs:
         with:
           channel: 'stable'
           architecture: x64
-      - run: flutter pub get
-      
 
-      - run: pod repo update
+      # -------------------------------------------------------------
+      # CACHE STEP #2: Cache CocoaPods (ios/Pods folder)
+      # -------------------------------------------------------------
+      - name: Cache Pods
+        uses: actions/cache@v3
+        with:
+          path: |
+            ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Flutter Pub Get
+        run: flutter pub get
+
+      # Optionally, if your pods need refreshing:
+      # - name: Pod Repo Update
+      #   run: pod repo update
+      #   working-directory: ios
+
+      # Usually 'pod install' is enough (and leverages the cache):
+      - name: Pod Install
+        run: pod install
         working-directory: ios
 
+      # Build your Flutter iOS app
       - run: flutter build ios --release --no-codesign
 
+      # Package into .ipa
       - run: mkdir Payload
         working-directory: build/ios/iphoneos
 
@@ -37,6 +107,6 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: build/ios/iphoneos/FlutterIpaExport.ipa
-          tag: v1.1
+          tag: v1.2
           overwrite: true
-          body: "This is first release"
+          body: "This is the first release"
