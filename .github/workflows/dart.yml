@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # --- Job 1: Run tests, check iOS version, etc. ---
+  # --- Job 1: Detect iOS SDK, run tests, etc. ---
   test-and-check:
     name: ✅ Test and iOS Version Check
     runs-on: macos-latest
@@ -18,12 +18,42 @@ jobs:
           architecture: x64
 
       # -------------------------------------------------------------
+      # STEP 1: Detect iOS SDK version from xcodebuild
+      # -------------------------------------------------------------
+      - name: Find iOS SDK version
+        id: find-ios-sdk
+        run: |
+          # Example output line: "iOS 17.5 -sdk iphoneos17.5"
+          # Parse out the "17.5"
+          ios_sdk=$(xcodebuild -showsdks | grep -E "iOS [0-9\.]+" | head -1 | sed "s/[^0-9]*[0-9\.]*.*/\1/")
+          
+          echo "Found iOS SDK version: $ios_sdk"
+          echo "sdk_version=$ios_sdk" >> $GITHUB_OUTPUT
+
+      # -------------------------------------------------------------
+      # STEP 2: Update Podfile to match iOS SDK version
+      # -------------------------------------------------------------
+      - name: Update Podfile Platform
+        run: |
+          # Get the version from the previous step
+          IOS_SDK_VERSION="${{ steps.find-ios-sdk.outputs.sdk_version }}"
+          
+          if [ -z "$IOS_SDK_VERSION" ]; then
+            echo "No iOS SDK version found. Skipping Podfile update..."
+          else
+            echo "Setting iOS platform to $IOS_SDK_VERSION in Podfile..."
+            # Replace the line starting with `platform :ios,` with the new version
+            sed -i.bak "s/^platform :ios, .*/platform :ios, '$IOS_SDK_VERSION'/" ios/Podfile || true
+            echo "Updated Podfile:"
+            cat ios/Podfile
+          fi
+
+      # -------------------------------------------------------------
       # CACHE STEP #1: Cache Flutter/Dart packages (~/.pub-cache)
       # -------------------------------------------------------------
       - name: Cache pub dependencies
         uses: actions/cache@v3
         with:
-          # We cache the pub cache folder using a unique key derived from pubspec.lock
           path: |
             ~/.pub-cache
           key: ${{ runner.os }}-pubcache-${{ hashFiles('pubspec.lock') }}
@@ -33,13 +63,11 @@ jobs:
       - name: Flutter Pub Get
         run: flutter pub get
 
-      # Optional: Check iOS SDK versions, simulator versions, etc.
+      # Show iOS SDKs for debugging
       - name: Show iOS SDKs
         run: xcodebuild -showsdks
 
-      # -------------------------------------------------------------
-      # If there's no 'test' directory, create it and add a placeholder test
-      # -------------------------------------------------------------
+      # Ensure there's at least one test
       - name: Ensure test directory
         run: |
           if [ ! -d "test" ]; then
@@ -48,24 +76,15 @@ jobs:
             echo -e "import 'package:flutter_test/flutter_test.dart';\n\nvoid main() {\n  test('placeholder test', () {\n    expect(true, isTrue);\n  });\n}" > test/placeholder_test.dart
           fi
 
-      # Run your Flutter unit/UI tests at the Dart/Flutter level
+      # Run Flutter tests
       - name: Run Flutter Tests
         run: flutter test
-
-      #
-      # In your ios/Podfile, you might specify:
-      #
-      #   # ios/Podfile
-      #   platform :ios, '12.0'
-      #
-      # This ensures the app is built for iOS 12.0 and above.
-      #
 
   # --- Job 2: Build and export IPA ---
   build-ios:
     name: 🎉 iOS Build
     runs-on: macos-latest
-    needs: test-and-check   # Ensures this job only runs if tests pass
+    needs: test-and-check   # Only runs if tests pass
     steps:
       - uses: actions/checkout@v3
 
@@ -89,35 +108,34 @@ jobs:
       - name: Flutter Pub Get
         run: flutter pub get
 
-      # Optionally, if your pods need refreshing:
-      # - name: Pod Repo Update
-      #   run: pod repo update
-      #   working-directory: ios
-
-      # Usually 'pod install' is enough (and leverages the cache):
+      # Install pods (now referencing the updated platform version)
       - name: Pod Install
         run: pod install
         working-directory: ios
 
       # Build your Flutter iOS app
-      - run: flutter build ios --release --no-codesign
+      - name: Build iOS Release
+        run: flutter build ios --release --no-codesign
 
       # Package into .ipa
-      - run: mkdir Payload
+      - name: Create Payload Directory
+        run: mkdir Payload
         working-directory: build/ios/iphoneos
 
-      - run: mv Runner.app/ Payload
+      - name: Move App into Payload
+        run: mv Runner.app/ Payload
         working-directory: build/ios/iphoneos
 
-      - name: Zip output
+      - name: Zip IPA
         run: zip -qq -r -9 FlutterIpaExport.ipa Payload
         working-directory: build/ios/iphoneos
 
+      # Upload the artifact to a GitHub release
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: build/ios/iphoneos/FlutterIpaExport.ipa
-          tag: v1.2
+          tag: v1.4
           overwrite: true
-          body: "This is the first release"
+          body: "Built with iOS SDK from 'xcodebuild -showsdks'"
