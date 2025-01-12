@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "403124493662",
+    "project_id": "appointments-3297f",
+    "storage_bucket": "appointments-3297f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:403124493662:android:c39a9f3cf598afaf9143cf",
+        "android_client_info": {
+          "package_name": "com.hebrons.appointments"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyANfJDWKqNPXahIKDT_pDssuxHrzJHXn5E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
