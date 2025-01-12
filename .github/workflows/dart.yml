@@ -11,11 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install Flutter
-        uses: subosito/flutter-action@v2
+      - uses: flutter/flutter-action@v2
         with:
           channel: stable
-          architecture: x64
 
       # STEP 1: Detect iOS SDK version
       - name: Find iOS SDK version
@@ -44,6 +42,9 @@ jobs:
           key: ${{ runner.os }}-pubcache-${{ hashFiles('pubspec.lock') }}
           restore-keys: ${{ runner.os }}-pubcache-
 
+      - name: Clean Flutter Build
+        run: flutter clean
+
       - name: Flutter Pub Get
         run: flutter pub get
 
@@ -54,8 +55,8 @@ jobs:
       # Use script to ensure test directory
       - name: Ensure test directory
         run: |
-         chmod +x setup_tests.sh
-         ./setup_tests.sh
+          chmod +x setup_tests.sh
+          ./setup_tests.sh
         shell: bash
 
       # Run Flutter tests
@@ -63,18 +64,31 @@ jobs:
         run: flutter test
 
   # --- Job 2: Build and export IPA ---
-
   build-ios:
     runs-on: macos-latest
+    needs: test-and-check
     steps:
       - uses: actions/checkout@v3
+
       - uses: flutter/flutter-action@v2
         with:
           channel: stable
+
       - name: Set Flutter Root
         run: echo "export FLUTTER_ROOT=$(dirname $(dirname $(which flutter)))" >> $GITHUB_ENV
+
+      - name: Print Flutter Root
+        run: echo "Flutter root is set to $FLUTTER_ROOT"
+
+      - name: Install CocoaPods
+        run: sudo gem install cocoapods
+
+      - name: Clean Flutter Build
+        run: flutter clean
+
       - name: Flutter Pub Get
         run: flutter pub get
+
       - name: Pod Install
         run: pod install
         working-directory: ios
