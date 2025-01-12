@@ -44,18 +44,37 @@ jobs:
 
       - name: Setup iOS Simulator
         run: |
-          # List available runtimes and devices
-          xcrun simctl list
+          echo "Available simulator runtimes:"
+          xcrun simctl list runtimes
           
-          # Create and boot iPhone 14 simulator
+          echo "Creating new simulator..."
           UDID=$(xcrun simctl create "iPhone 14" com.apple.CoreSimulator.SimDeviceType.iPhone-14 com.apple.CoreSimulator.SimRuntime.iOS-17-0)
+          echo "Created simulator with UDID: $UDID"
+          
+          echo "Erasing simulator content and settings..."
+          xcrun simctl erase "$UDID"
+          
+          echo "Booting simulator..."
           xcrun simctl boot "$UDID"
           echo "SIMULATOR_UDID=$UDID" >> $GITHUB_ENV
           
-          # Wait longer for simulator to fully boot
+          # Wait for simulator to fully boot and be ready
           echo "Waiting for simulator to boot..."
           sleep 20
-          echo "Simulator booted with UDID: $UDID"
+          
+          # Verify simulator state
+          echo "Checking simulator state..."
+          xcrun simctl list devices | grep "$UDID"
+          
+          # Verify simulator is booted
+          BOOT_STATUS=$(xcrun simctl list devices | grep "$UDID" | grep -c "Booted" || echo "0")
+          if [ "$BOOT_STATUS" -eq "0" ]; then
+            echo "Simulator failed to boot, attempting to boot again..."
+            xcrun simctl boot "$UDID"
+            sleep 20
+          fi
+          
+          echo "Simulator setup complete"
 
       - name: Setup Simulator Permissions
         run: |
@@ -63,10 +82,31 @@ jobs:
           BUNDLE_ID=$(plutil -p ios-app/Runner.app/Info.plist | grep CFBundleIdentifier | awk -F'"' '{print $4}')
           echo "Setting up permissions for bundle ID: $BUNDLE_ID"
           
-          # Grant all necessary permissions
-          xcrun simctl privacy $SIMULATOR_UDID grant all $BUNDLE_ID
-          xcrun simctl privacy $SIMULATOR_UDID grant notification $BUNDLE_ID
-          xcrun simctl status_bar $SIMULATOR_UDID clear
+          # Wait a bit more for simulator to be fully ready
+          echo "Ensuring simulator is ready..."
+          sleep 10
+          
+          # Try to set permissions but continue if it fails
+          echo "Attempting to set privacy settings..."
+          xcrun simctl privacy $SIMULATOR_UDID grant all $BUNDLE_ID || {
+            echo "Warning: Could not set all privacy settings. This is not fatal, continuing..."
+          }
+          
+          echo "Attempting to set notification permissions..."
+          xcrun simctl privacy $SIMULATOR_UDID grant notification $BUNDLE_ID || {
+            echo "Warning: Could not set notification permissions. This is not fatal, continuing..."
+          }
+          
+          echo "Attempting to clear status bar..."
+          xcrun simctl status_bar $SIMULATOR_UDID clear || {
+            echo "Warning: Could not clear status bar. This is not fatal, continuing..."
+          }
+          
+          # List current privacy settings
+          echo "Current privacy settings:"
+          xcrun simctl privacy $SIMULATOR_UDID || {
+            echo "Warning: Could not list privacy settings"
+          }
 
       - name: Install and Test App
         id: test
