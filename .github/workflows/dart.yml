@@ -18,24 +18,26 @@ jobs:
           architecture: x64
 
       # -------------------------------------------------------------
-      # STEP 1: Detect iOS SDK version from xcodebuild
+      # STEP 1: Detect iOS SDK version
       # -------------------------------------------------------------
       - name: Find iOS SDK version
         id: find-ios-sdk
         run: |
-          # Example output line: "iOS 17.5 -sdk iphoneos17.5"
-          # Parse out the "17.5"
-          ios_sdk=$(xcodebuild -showsdks | grep -E "iOS [0-9\.]+" | head -1 | sed "s/[^0-9]*[0-9\.]*.*/\1/")
+          # Example line from xcodebuild -showsdks: "iOS 17.5 -sdk iphoneos17.5"
+          # We want to extract just "17.5" (or whatever version is installed).
+          ios_sdk=$(xcodebuild -showsdks \
+            | grep -E "iOS [0-9\.]+" \
+            | head -1 \
+            | sed -E "s/.*iOS ([0-9\.]+).*/\1/")
           
           echo "Found iOS SDK version: $ios_sdk"
           echo "sdk_version=$ios_sdk" >> $GITHUB_OUTPUT
 
       # -------------------------------------------------------------
-      # STEP 2: Update Podfile to match iOS SDK version
+      # STEP 2: Update Podfile to match the detected iOS SDK version
       # -------------------------------------------------------------
       - name: Update Podfile Platform
         run: |
-          # Get the version from the previous step
           IOS_SDK_VERSION="${{ steps.find-ios-sdk.outputs.sdk_version }}"
           
           if [ -z "$IOS_SDK_VERSION" ]; then
@@ -63,17 +65,25 @@ jobs:
       - name: Flutter Pub Get
         run: flutter pub get
 
-      # Show iOS SDKs for debugging
+      # Optional: Show iOS SDKs for debugging
       - name: Show iOS SDKs
         run: xcodebuild -showsdks
 
-      # Ensure there's at least one test
+      # If there's no 'test' directory, create it and add a placeholder test
       - name: Ensure test directory
         run: |
           if [ ! -d "test" ]; then
             echo "No 'test' directory found. Creating one..."
             mkdir test
-            echo -e "import 'package:flutter_test/flutter_test.dart';\n\nvoid main() {\n  test('placeholder test', () {\n    expect(true, isTrue);\n  });\n}" > test/placeholder_test.dart
+            cat <<EOF > test/placeholder_test.dart
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test('placeholder test', () {
+    expect(true, isTrue);
+  });
+}
+EOF
           fi
 
       # Run Flutter tests
@@ -108,7 +118,6 @@ jobs:
       - name: Flutter Pub Get
         run: flutter pub get
 
-      # Install pods (now referencing the updated platform version)
       - name: Pod Install
         run: pod install
         working-directory: ios
@@ -138,4 +147,4 @@ jobs:
           file: build/ios/iphoneos/FlutterIpaExport.ipa
           tag: v1.4
           overwrite: true
-          body: "Built with iOS SDK from 'xcodebuild -showsdks'"
+          body: "Built with auto-detected iOS SDK version"
