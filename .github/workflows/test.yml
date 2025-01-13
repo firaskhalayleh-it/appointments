@@ -9,71 +9,117 @@ on:
         default: 'latest'
 
 jobs:
-  test-on-simulator:
-    name: 🧪 Test IPA on iOS Simulator
+  test-simulator:
+    name: 🔄 Simulator Test
     runs-on: macos-latest
     steps:
-      - name: Download Release IPA
-        run: |
-          if [ "${{ github.event.inputs.version_tag }}" == "latest" ]; then
-            RELEASE_URL=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
-              jq -r '.assets[] | select(.name | endswith(".ipa")) | .browser_download_url')
-          else
-            RELEASE_URL=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.event.inputs.version_tag }}" | \
-              jq -r '.assets[] | select(.name | endswith(".ipa")) | .browser_download_url')
-          fi
-          
-          mkdir -p ios-app
-          curl -L -o ios-app/FlutterIpaExport.ipa "$RELEASE_URL"
+      - uses: actions/checkout@v3
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.1'
+          channel: 'stable'
 
-      - name: Extract and Prepare App
+      - name: Flutter Setup
         run: |
-          cd ios-app
-          unzip -q FlutterIpaExport.ipa
-          rm -rf Runner.app
-          cp -R Payload/Runner.app ./Runner.app
-          plutil -convert xml1 Runner.app/Info.plist
+          flutter clean
+          flutter pub get
           
-          # Only set essential plist values
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.hebrons.appointments" Runner.app/Info.plist
-          chmod +x Runner.app/Runner
-
-      - name: Setup and Test on Simulator
-        id: test
+      - name: Debug Info
         run: |
-          # Cleanup and create simulator
+          flutter doctor -v
+          xcodebuild -showsdks
+          xcrun simctl list devices
+
+      - name: Build for Simulator
+        run: |
+          flutter build ios --simulator --no-codesign
+          
+      - name: Prepare Simulator
+        id: simulator
+        run: |
+          # Shutdown existing simulators
           xcrun simctl shutdown all 2>/dev/null || true
-          UDID=$(xcrun simctl create "iPhone 14" com.apple.CoreSimulator.SimDeviceType.iPhone-14 com.apple.CoreSimulator.SimRuntime.iOS-17-0)
+          
+          # List available runtimes
+          echo "Available iOS runtimes:"
+          xcrun simctl list runtimes
+          
+          # Create and boot simulator
+          UDID=$(xcrun simctl create "iOS-Simulator" \
+            com.apple.CoreSimulator.SimDeviceType.iPhone-14 \
+            com.apple.CoreSimulator.SimRuntime.iOS-17-0 || \
+            xcrun simctl create "iOS-Simulator" \
+            com.apple.CoreSimulator.SimDeviceType.iPhone-14 \
+            com.apple.CoreSimulator.SimRuntime.iOS-16-4)
+            
+          echo "Created simulator with UDID: $UDID"
           xcrun simctl boot "$UDID"
           
-          # Install and launch app
-          xcrun simctl install "$UDID" ios-app/Runner.app
+          # Wait for simulator to boot
+          echo "Waiting for simulator to boot..."
+          sleep 15
           
-          # Launch and monitor
+          echo "udid=$UDID" >> $GITHUB_OUTPUT
+
+      - name: Install App
+        run: |
+          APP_PATH="build/ios/iphonesimulator/Runner.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "❌ App not found at $APP_PATH"
+            exit 1
+          fi
+          
+          echo "Installing app to simulator..."
+          xcrun simctl install ${{ steps.simulator.outputs.udid }} "$APP_PATH"
+
+      - name: Test App Launch
+        id: app_test
+        run: |
           echo "Launching app..."
-          xcrun simctl launch "$UDID" com.hebrons.appointments &
+          xcrun simctl launch --console ${{ steps.simulator.outputs.udid }} com.hebrons.appointments &
           
-          # Quick check for crash
-          sleep 5
-          if xcrun simctl spawn $UDID ps aux | grep -q "[R]unner"; then
+          # Wait for app to launch
+          sleep 10
+          
+          # Check if app is running
+          if xcrun simctl spawn ${{ steps.simulator.outputs.udid }} ps aux | grep -q "[R]unner"; then
             echo "✅ App launched successfully"
             echo "test_status=success" >> $GITHUB_OUTPUT
           else
             echo "❌ App crashed on launch"
-            xcrun simctl spawn $UDID log show --predicate 'processImagePath contains "Runner"' --last 30s
-            echo "test_status=failure" >> $GITHUB_OUTPUT
+            echo "Fetching system logs..."
+            xcrun simctl spawn ${{ steps.simulator.outputs.udid }} log show --predicate 'processImagePath contains "Runner"' --last 1m
+            echo "Fetching crash logs..."
+            xcrun simctl spawn ${{ steps.simulator.outputs.udid }} crash list
             exit 1
           fi
 
-      - name: Upload Results
+      - name: Collect Debug Info on Failure
+        if: failure()
+        run: |
+          echo "Creating debug artifacts directory..."
+          mkdir -p debug_artifacts
+          
+          echo "Collecting simulator status..."
+          xcrun simctl list devices > debug_artifacts/simulator_devices.txt
+          
+          echo "Collecting crash reports..."
+          cp -r ~/Library/Logs/DiagnosticReports/* debug_artifacts/ || true
+          
+          echo "Collecting system logs..."
+          xcrun simctl spawn ${{ steps.simulator.outputs.udid }} log show --last 2m > debug_artifacts/simulator.log
+          
+          echo "Collecting app sandbox info..."
+          xcrun simctl get_app_container ${{ steps.simulator.outputs.udid }} com.hebrons.appointments > debug_artifacts/app_container.txt
+          
+          echo "Checking app installation..."
+          ls -la build/ios/iphonesimulator/Runner.app > debug_artifacts/app_contents.txt
+
+      - name: Upload Debug Artifacts
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: test-results
-          path: ios-app/Runner.app/Info.plist
-
-      - name: Cleanup
-        if: always()
-        run: xcrun simctl shutdown all && xcrun simctl delete all
+          name: debug-artifacts
+          path: debug_artifacts
