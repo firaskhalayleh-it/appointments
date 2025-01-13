@@ -20,21 +20,50 @@ jobs:
         with:
           flutter-version: '3.27.1'
           channel: 'stable'
+          
+      - name: Setup Ruby and CocoaPods
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Setup Firebase Configuration
+        env:
+          GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}
+        run: |
+          echo "Setting up Firebase configuration..."
+          cd ios/Runner
+          echo "$GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > GoogleService-Info.plist
+          
+          if [ ! -f "GoogleService-Info.plist" ]; then
+            echo "❌ Failed to create GoogleService-Info.plist"
+            exit 1
+          fi
+          echo "✅ Firebase configuration created successfully"
 
       - name: Flutter Setup
         run: |
           flutter clean
           flutter pub get
           
+      - name: Pod Install
+        run: |
+          cd ios
+          rm -rf Pods Podfile.lock
+          pod repo update
+          pod install --repo-update
+          
       - name: Debug Info
         run: |
           flutter doctor -v
           xcodebuild -showsdks
           xcrun simctl list devices
+          echo "Checking Firebase config..."
+          ls -la ios/Runner/GoogleService-Info.plist || echo "Firebase config not found!"
 
       - name: Build for Simulator
         run: |
-          flutter build ios --simulator --no-codesign
+          flutter build ios --simulator --no-codesign --debug
           
       - name: Prepare Simulator
         id: simulator
@@ -61,6 +90,9 @@ jobs:
           echo "Waiting for simulator to boot..."
           sleep 15
           
+          # Verify simulator status
+          xcrun simctl list devices | grep "$UDID"
+          
           echo "udid=$UDID" >> $GITHUB_OUTPUT
 
       - name: Install App
@@ -68,20 +100,29 @@ jobs:
           APP_PATH="build/ios/iphonesimulator/Runner.app"
           if [ ! -d "$APP_PATH" ]; then
             echo "❌ App not found at $APP_PATH"
+            echo "Contents of build/ios:"
+            ls -R build/ios/
             exit 1
           fi
           
+          echo "Verifying app bundle..."
+          ls -la "$APP_PATH"
+          
           echo "Installing app to simulator..."
           xcrun simctl install ${{ steps.simulator.outputs.udid }} "$APP_PATH"
+          
+          echo "Verifying app installation..."
+          xcrun simctl get_app_container ${{ steps.simulator.outputs.udid }} com.hebrons.appointments || echo "App not installed properly"
 
       - name: Test App Launch
         id: app_test
         run: |
           echo "Launching app..."
-          xcrun simctl launch --console ${{ steps.simulator.outputs.udid }} com.hebrons.appointments &
+          xcrun simctl launch --console-pty ${{ steps.simulator.outputs.udid }} com.hebrons.appointments &
           
           # Wait for app to launch
-          sleep 10
+          echo "Waiting for app initialization..."
+          sleep 15
           
           # Check if app is running
           if xcrun simctl spawn ${{ steps.simulator.outputs.udid }} ps aux | grep -q "[R]unner"; then
@@ -90,7 +131,7 @@ jobs:
           else
             echo "❌ App crashed on launch"
             echo "Fetching system logs..."
-            xcrun simctl spawn ${{ steps.simulator.outputs.udid }} log show --predicate 'processImagePath contains "Runner"' --last 1m
+            xcrun simctl spawn ${{ steps.simulator.outputs.udid }} log show --predicate 'processImagePath contains "Runner"' --last 2m
             echo "Fetching crash logs..."
             xcrun simctl spawn ${{ steps.simulator.outputs.udid }} crash list
             exit 1
@@ -112,10 +153,13 @@ jobs:
           xcrun simctl spawn ${{ steps.simulator.outputs.udid }} log show --last 2m > debug_artifacts/simulator.log
           
           echo "Collecting app sandbox info..."
-          xcrun simctl get_app_container ${{ steps.simulator.outputs.udid }} com.hebrons.appointments > debug_artifacts/app_container.txt
+          xcrun simctl get_app_container ${{ steps.simulator.outputs.udid }} com.hebrons.appointments > debug_artifacts/app_container.txt || true
           
           echo "Checking app installation..."
           ls -la build/ios/iphonesimulator/Runner.app > debug_artifacts/app_contents.txt
+          
+          echo "Collecting Firebase config status..."
+          ls -la ios/Runner/GoogleService-Info.plist > debug_artifacts/firebase_config.txt || true
 
       - name: Upload Debug Artifacts
         if: always()
