@@ -86,69 +86,89 @@ jobs:
         with:
           flutter-version: "3.27.1"
           channel: "stable"
-
       - name: Add Firebase SDK Package
         run: |
-          cd ios
-          cat << 'EOF' > firebase_package.rb
-          require 'xcodeproj'
-
-          begin
-            project_path = 'Runner.xcodeproj'
-            project = Xcodeproj::Project.open(project_path)
-            
-            # Get the main target
-            target = project.targets.first
-            puts "Found target: #{target.name}"
-            
-            # Add Swift Package dependency
-            package_configs = {
-              'name' => 'firebase-ios-sdk',
-              'url' => 'https://github.com/firebase/firebase-ios-sdk',
-              'version' => '10.20.0'
-            }
-            
-            # Add to Package.swift dependencies
-            dependencies_phase = project.objects.find { |obj| obj.is_a?(Xcodeproj::Project::Object::PBXFrameworksBuildPhase) }
-            
-            # Create Swift Package reference
-            ref = project.root_object.add_reference(
-              "#{package_configs['url']}", 
-              'Package Dependency',
-              Xcodeproj::Project::Object::PBXFileReference::EXPLICIT_FILE_TYPE_SWIFT_PACKAGE
-            )
-            
-            # Add build configuration
-            project.build_configurations.each do |config|
-              config.build_settings['SWIFT_PACKAGE_PATHS'] ||= []
-              config.build_settings['SWIFT_PACKAGE_PATHS'] << ref.path
-            end
-            
-            # Save the project
-            project.save
-            
-            puts "Successfully added Firebase SDK package"
-          rescue => e
-            puts "Error: #{e.message}"
-            puts e.backtrace
-            exit 1
-          end
-          EOF
-
-          ruby firebase_package.rb
-
-          - name: Setup Swift Package Manager
-          run: |
             cd ios
+            cat << 'EOF' > firebase_package.rb
+            require 'xcodeproj'
+            
+            begin
+              project_path = 'Runner.xcodeproj'
+              project = Xcodeproj::Project.open(project_path)
+              
+              # Get the main target
+              target = project.targets.first
+              puts "Found target: #{target.name}"
+              
+              # Add Swift Package dependency
+              package_configs = {
+                'name' => 'firebase-ios-sdk',
+                'url' => 'https://github.com/firebase/firebase-ios-sdk',
+                'version' => '10.20.0'
+              }
+              
+              # Create a package reference group if it doesn't exist
+              package_group = project.main_group.find_subpath('Packages', true)
+              package_group.set_source_tree('SOURCE_ROOT')
+              
+              # Create Swift Package reference
+              ref = package_group.new_file("#{package_configs['url']}")
+              ref.last_known_file_type = 'wrapper.pb-project'
+              ref.set_source_tree('SOURCE_ROOT')
+              
+              # Add Swift Package Manager build settings
+              project.targets.each do |target|
+                target.build_configurations.each do |config|
+                  if config.build_settings['SWIFT_VERSION'].nil?
+                    config.build_settings['SWIFT_VERSION'] = '5.0'
+                  end
+                  
+                  # Enable SPM
+                  config.build_settings['SWIFT_PACKAGE_MANAGER'] = true
+                  
+                  # Add package path
+                  if config.build_settings['SWIFT_PACKAGE_PATHS'].nil?
+                    config.build_settings['SWIFT_PACKAGE_PATHS'] = ['$(SRCROOT)/Packages']
+                  else
+                    config.build_settings['SWIFT_PACKAGE_PATHS'] << '$(SRCROOT)/Packages'
+                  end
+                end
+              end
+              
+              # Save the project
+              project.save
+              
+              puts "Successfully added Firebase SDK package"
+            rescue => e
+              puts "Error: #{e.message}"
+              puts e.backtrace
+              exit 1
+            end
+            EOF
+            
+            ruby firebase_package.rb
+            
+            # Create Package.swift
             cat << 'EOF' > Package.swift
             // swift-tools-version:5.5
             import PackageDescription
-
+  
             let package = Package(
                 name: "Runner",
-                platforms: [.iOS(.v13)],
+                platforms: [
+                    .iOS(.v13)
+                ],
+                products: [
+                    .library(
+                        name: "Runner",
+                        targets: ["Runner"]
+                    )
+                ],
                 dependencies: [
-                    .package(url: "https://github.com/firebase/firebase-ios-sdk.git", from: "10.20.0")
+                    .package(
+                        url: "https://github.com/firebase/firebase-ios-sdk.git",
+                        .upToNextMajor(from: "10.20.0")
+                    )
                 ],
                 targets: [
                     .target(
@@ -162,14 +182,18 @@ jobs:
                 ]
             )
             EOF
-
+            
+            # Create Sources directory structure
+            mkdir -p Sources/Runner
+  
+        
       - name: Update Package Dependencies
         run: |
-          cd ios
-          xcodebuild -resolvePackageDependencies \
-            -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -clonedSourcePackagesDirPath SourcePackages
+            cd ios
+            xcodebuild -resolvePackageDependencies \
+              -workspace Runner.xcworkspace \
+              -scheme Runner \
+              -clonedSourcePackagesDirPath SourcePackages
 
       - name: Setup Ruby and CocoaPods
         uses: ruby/setup-ruby@v1
