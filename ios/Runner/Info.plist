@@ -26,43 +26,17 @@
         <string>armv7</string>
     </array>
     
-    <!-- Privacy Permissions -->
-    <key>NSCameraUsageDescription</key>
-    <string>This app needs camera access to let you take pictures for your profile and appointments.</string>
+    <!-- Only Photo Library Permission -->
     <key>NSPhotoLibraryUsageDescription</key>
     <string>This app needs access to your photos to let you share images for appointments.</string>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>This app needs microphone access for voice messages and calls.</string>
     
-    <!-- Deep Linking -->
-    <key>CFBundleURLTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleURLName</key>
-            <string>com.hebrons.appointments</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>hebrons-appointments</string>
-            </array>
-        </dict>
-    </array>
-    
-    <!-- Supported Interface Orientations -->
+    <!-- Essential UI Settings -->
     <key>UISupportedInterfaceOrientations</key>
     <array>
         <string>UIInterfaceOrientationPortrait</string>
-        <string>UIInterfaceOrientationLandscapeLeft</string>
-        <string>UIInterfaceOrientationLandscapeRight</string>
-    </array>
-    <key>UISupportedInterfaceOrientations~ipad</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-        <string>UIInterfaceOrientationPortraitUpsideDown</string>
-        <string>UIInterfaceOrientationLandscapeLeft</string>
-        <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     
-    <!-- Additional Required Settings -->
+    <!-- Required Base Settings -->
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UILaunchStoryboardName</key>
@@ -73,19 +47,5 @@
     <true/>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
-    
-    <!-- Background Modes (if needed) -->
-    <key>UIBackgroundModes</key>
-    <array>
-        <string>fetch</string>
-        <string>remote-notification</string>
-    </array>
-    
-    <!-- App Transport Security -->
-    <key>NSAppTransportSecurity</key>
-    <dict>
-        <key>NSAllowsArbitraryLoads</key>
-        <true/>
-    </dict>
 </dict>
 </plist>

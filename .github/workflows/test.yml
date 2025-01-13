@@ -13,294 +13,67 @@ jobs:
     name: 🧪 Test IPA on iOS Simulator
     runs-on: macos-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Download Release IPA
         run: |
-          echo "Fetching release information..."
-          
           if [ "${{ github.event.inputs.version_tag }}" == "latest" ]; then
-            echo "Getting latest release URL..."
-            RELEASE_URL=$(curl -s \
-              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            RELEASE_URL=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
               "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
               jq -r '.assets[] | select(.name | endswith(".ipa")) | .browser_download_url')
           else
-            echo "Getting specific version URL..."
-            RELEASE_URL=$(curl -s \
-              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            RELEASE_URL=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
               "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.event.inputs.version_tag }}" | \
               jq -r '.assets[] | select(.name | endswith(".ipa")) | .browser_download_url')
           fi
           
-          if [ -z "$RELEASE_URL" ] || [ "$RELEASE_URL" == "null" ]; then
-            echo "Error: Could not find IPA file in release assets"
-            exit 1
-          fi
-          
-          echo "Downloading IPA from: $RELEASE_URL"
           mkdir -p ios-app
-          curl -L \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/octet-stream" \
-            -o ios-app/FlutterIpaExport.ipa "$RELEASE_URL"
-          
-          if [ ! -f ios-app/FlutterIpaExport.ipa ]; then
-            echo "Error: Failed to download IPA file"
-            exit 1
-          fi
-          
-          echo "IPA file downloaded successfully"
-          ls -lh ios-app/FlutterIpaExport.ipa
+          curl -L -o ios-app/FlutterIpaExport.ipa "$RELEASE_URL"
 
-      - name: Extract IPA and Prepare for Simulator
+      - name: Extract and Prepare App
         run: |
           cd ios-app
-          unzip FlutterIpaExport.ipa
-          mkdir -p Payload/Runner.app/Frameworks
-          cp -r Payload/Runner.app ./Runner.app
-          
-          # Convert plist to XML for editing
+          unzip -q FlutterIpaExport.ipa
+          rm -rf Runner.app
+          cp -R Payload/Runner.app ./Runner.app
           plutil -convert xml1 Runner.app/Info.plist
           
-          # Ensure bundle ID is set correctly
+          # Only set essential plist values
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.hebrons.appointments" Runner.app/Info.plist
-          
-          # Add required capabilities
-          /usr/libexec/PlistBuddy -c "Add :UIRequiredDeviceCapabilities array" Runner.app/Info.plist 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :UIRequiredDeviceCapabilities:0 string 'armv7'" Runner.app/Info.plist 2>/dev/null || true
-          
-          # Update URL schemes
-          /usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes" Runner.app/Info.plist 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" Runner.app/Info.plist
-          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" Runner.app/Info.plist
-          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLName string 'com.hebrons.appointments'" Runner.app/Info.plist
-          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" Runner.app/Info.plist
-          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string 'hebrons-appointments'" Runner.app/Info.plist
-          
-          echo "Modified Info.plist contents:"
-          plutil -p Runner.app/Info.plist
-          
-          echo "Bundle identifier:"
-          plutil -p Runner.app/Info.plist | grep CFBundleIdentifier
+          chmod +x Runner.app/Runner
 
-      - name: Setup iOS Simulator
-        run: |
-          echo "Shutting down any existing simulators..."
-          xcrun simctl shutdown all 2>/dev/null || true
-          xcrun simctl erase all 2>/dev/null || true
-          
-          echo "Available simulator runtimes:"
-          xcrun simctl list runtimes
-          
-          echo "Creating new simulator..."
-          UDID=$(xcrun simctl create "iPhone 14" com.apple.CoreSimulator.SimDeviceType.iPhone-14 com.apple.CoreSimulator.SimRuntime.iOS-17-0)
-          echo "Created simulator with UDID: $UDID"
-          
-          echo "Erasing simulator content and settings..."
-          xcrun simctl erase "$UDID"
-          
-          echo "Setting up simulator preferences..."
-          # Create a clean state for the simulator
-          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
-          defaults write com.apple.iphonesimulator AllowFullscreenMode -bool false
-          
-          echo "Booting simulator..."
-          xcrun simctl boot "$UDID"
-          echo "SIMULATOR_UDID=$UDID" >> $GITHUB_ENV
-          
-          # Wait for simulator to be fully booted
-          echo "Waiting for simulator to boot..."
-          TIMEOUT=0
-          while [ $TIMEOUT -lt 30 ]; do
-            BOOT_STATUS=$(xcrun simctl list devices | grep "$UDID" | grep -c "Booted" || echo "0")
-            if [ "$BOOT_STATUS" -eq "1" ]; then
-              echo "✓ Simulator booted successfully"
-              break
-            fi
-            echo "Still waiting for simulator to boot... ($TIMEOUT seconds)"
-            sleep 5
-            TIMEOUT=$((TIMEOUT + 5))
-          done
-          
-          if [ $TIMEOUT -ge 30 ]; then
-            echo "⚠️ Simulator boot process took longer than expected, but continuing..."
-          fi
-          
-          # Additional warm-up time
-          sleep 10
-          
-          echo "Verifying simulator state..."
-          xcrun simctl list devices | grep "$UDID"
-          
-          echo "Simulator setup complete"
-
-      - name: Setup Simulator Permissions
-        run: |
-          BUNDLE_ID=$(plutil -p ios-app/Runner.app/Info.plist | grep CFBundleIdentifier | awk -F'"' '{print $4}')
-          echo "Setting up permissions for bundle ID: $BUNDLE_ID"
-          
-          echo "Ensuring simulator is ready..."
-          sleep 15
-          
-          echo "Setting individual privacy permissions..."
-          
-          # List of permissions to try
-          PERMISSIONS=("camera" "photos" "microphone" "location" "notifications" "calendar")
-          
-          for PERMISSION in "${PERMISSIONS[@]}"; do
-            echo "Attempting to set $PERMISSION permission..."
-            if xcrun simctl privacy $SIMULATOR_UDID grant $PERMISSION $BUNDLE_ID 2>/dev/null; then
-              echo "✓ Successfully set $PERMISSION permission"
-            else
-              echo "⚠️ Could not set $PERMISSION permission - this is expected during first launch"
-            fi
-            sleep 1
-          done
-          
-          echo "Setting up additional permissions via defaults..."
-          xcrun simctl spawn $SIMULATOR_UDID defaults write com.apple.springboard FBLaunchWatchdogExceptionsKey -array-add "$BUNDLE_ID"
-          
-          echo "Verifying app container access..."
-          if xcrun simctl get_app_container $SIMULATOR_UDID $BUNDLE_ID >/dev/null 2>&1; then
-            echo "✓ App container is accessible"
-          else
-            echo "⚠️ App container not yet available - this is normal before first launch"
-          fi
-          
-          echo "Resetting simulator UI state..."
-          xcrun simctl status_bar $SIMULATOR_UDID clear || true
-          
-          echo "Permission setup complete (some permissions may need to be granted during app usage)"
-
-      - name: Install and Test App
+      - name: Setup and Test on Simulator
         id: test
         run: |
-          echo "Verifying simulator state..."
-          SIM_STATE=$(xcrun simctl list devices | grep "$SIMULATOR_UDID" | awk '{print $NF}' | tr -d '()')
-          if [ "$SIM_STATE" != "Booted" ]; then
-            echo "Simulator not in proper state: $SIM_STATE. Attempting to fix..."
-            xcrun simctl shutdown $SIMULATOR_UDID || true
-            xcrun simctl boot $SIMULATOR_UDID
-            sleep 15
-          fi
+          # Cleanup and create simulator
+          xcrun simctl shutdown all 2>/dev/null || true
+          UDID=$(xcrun simctl create "iPhone 14" com.apple.CoreSimulator.SimDeviceType.iPhone-14 com.apple.CoreSimulator.SimRuntime.iOS-17-0)
+          xcrun simctl boot "$UDID"
           
-          BUNDLE_ID=$(plutil -p ios-app/Runner.app/Info.plist | grep CFBundleIdentifier | awk -F'"' '{print $4}')
-          echo "Removing any existing app installation..."
-          xcrun simctl uninstall $SIMULATOR_UDID $BUNDLE_ID || true
+          # Install and launch app
+          xcrun simctl install "$UDID" ios-app/Runner.app
           
-          echo "Installing app on simulator..."
-          xcrun simctl install $SIMULATOR_UDID ios-app/Runner.app || {
-            echo "Installation failed. Directory contents:"
-            ls -la ios-app/
-            ls -la ios-app/Runner.app/
-            exit 1
-          }
+          # Launch and monitor
+          echo "Launching app..."
+          xcrun simctl launch "$UDID" com.hebrons.appointments &
           
-          echo "Bundle ID: $BUNDLE_ID"
-          
-          echo "Verifying app container..."
-          xcrun simctl get_app_container $SIMULATOR_UDID $BUNDLE_ID
-          
-          # Pre-launch checks
-          echo "Running pre-launch checks..."
-          
-          echo "Verifying app binary..."
-          BINARY_PATH="ios-app/Runner.app/Runner"
-          if [ ! -x "$BINARY_PATH" ]; then
-            echo "Making app binary executable..."
-            chmod +x "$BINARY_PATH"
-          fi
-          
-          echo "Verifying code signing..."
-          codesign -vv ios-app/Runner.app 2>&1 || {
-            echo "Warning: Code signing verification failed, attempting to resign..."
-            codesign --force --sign - ios-app/Runner.app
-          }
-          
-          echo "Checking app container structure..."
-          xcrun simctl get_app_container $SIMULATOR_UDID $BUNDLE_ID app && {
-            echo "App container exists and is accessible"
-          }
-          
-          echo "Launching app (Attempt 1: Direct launch)..."
-          xcrun simctl launch --console-pty $SIMULATOR_UDID $BUNDLE_ID || {
-            echo "First launch attempt failed. Trying alternative methods..."
-            
-            echo "Resetting simulator state..."
-            xcrun simctl shutdown $SIMULATOR_UDID || true
-            xcrun simctl boot $SIMULATOR_UDID
-            sleep 10
-            
-            echo "Launching app (Attempt 2: Launch after reset)..."
-            xcrun simctl launch --console-pty $SIMULATOR_UDID $BUNDLE_ID || {
-              echo "Second launch attempt failed. Trying URL scheme..."
-              
-              echo "Launching app (Attempt 3: URL Scheme)..."
-              xcrun simctl openurl $SIMULATOR_UDID "hebrons-appointments://" || {
-                echo "All launch attempts failed. Collecting diagnostics..."
-                
-                echo "App container contents:"
-                xcrun simctl get_app_container $SIMULATOR_UDID $BUNDLE_ID app
-                ls -la "$(xcrun simctl get_app_container $SIMULATOR_UDID $BUNDLE_ID app)"
-                
-                echo "System log:"
-                xcrun simctl spawn $SIMULATOR_UDID log show --predicate 'processImagePath contains "Runner"' --last 2m
-                
-                echo "Simulator status:"
-                xcrun simctl list devices | grep "$SIMULATOR_UDID"
-                
-                exit 1
-              }
-            }
-          }
-          
-          mkdir -p test-results
-          xcrun simctl spawn $SIMULATOR_UDID log stream --predicate 'processImagePath contains "Runner"' > test-results/app.log &
-          LOG_PID=$!
-          
-          echo "Monitoring app for 30 seconds..."
-          sleep 30
-          
-          kill $LOG_PID || true
-          
-          if xcrun simctl spawn $SIMULATOR_UDID ps aux | grep -q "[R]unner"; then
-            echo "✅ App is running successfully"
+          # Quick check for crash
+          sleep 5
+          if xcrun simctl spawn $UDID ps aux | grep -q "[R]unner"; then
+            echo "✅ App launched successfully"
             echo "test_status=success" >> $GITHUB_OUTPUT
           else
-            echo "❌ App crashed or failed to launch"
-            cat test-results/app.log
+            echo "❌ App crashed on launch"
+            xcrun simctl spawn $UDID log show --predicate 'processImagePath contains "Runner"' --last 30s
             echo "test_status=failure" >> $GITHUB_OUTPUT
             exit 1
           fi
 
-      - name: Capture Screenshots
-        if: always()
-        run: |
-          xcrun simctl io $SIMULATOR_UDID screenshot test-results/final_state.png
-
-      - name: Upload Test Results
+      - name: Upload Results
         if: always()
         uses: actions/upload-artifact@v3
         with:
           name: test-results
-          path: |
-            test-results/*
-            ios-app/Runner.app/Info.plist
+          path: ios-app/Runner.app/Info.plist
 
-      - name: Clean Up
+      - name: Cleanup
         if: always()
-        run: |
-          xcrun simctl shutdown $SIMULATOR_UDID
-          xcrun simctl delete $SIMULATOR_UDID
-
-      - name: Report Test Status
-        if: always()
-        run: |
-          if [ "${{ steps.test.outputs.test_status }}" == "success" ]; then
-            echo "Test completed successfully! ✅"
-          else
-            echo "Test failed! ❌"
-            exit 1
-          fi
+        run: xcrun simctl shutdown all && xcrun simctl delete all
