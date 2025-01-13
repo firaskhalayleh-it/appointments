@@ -60,10 +60,27 @@ jobs:
           unzip FlutterIpaExport.ipa
           mkdir -p Payload/Runner.app/Frameworks
           cp -r Payload/Runner.app ./Runner.app
+          
+          # Convert plist to XML for editing
           plutil -convert xml1 Runner.app/Info.plist
           
-          echo "App contents:"
-          ls -la Runner.app/
+          # Ensure bundle ID is set correctly
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.hebrons.appointments" Runner.app/Info.plist
+          
+          # Add required capabilities
+          /usr/libexec/PlistBuddy -c "Add :UIRequiredDeviceCapabilities array" Runner.app/Info.plist 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UIRequiredDeviceCapabilities:0 string 'armv7'" Runner.app/Info.plist 2>/dev/null || true
+          
+          # Update URL schemes
+          /usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes" Runner.app/Info.plist 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" Runner.app/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" Runner.app/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLName string 'com.hebrons.appointments'" Runner.app/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" Runner.app/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string 'hebrons-appointments'" Runner.app/Info.plist
+          
+          echo "Modified Info.plist contents:"
+          plutil -p Runner.app/Info.plist
           
           echo "Bundle identifier:"
           plutil -p Runner.app/Info.plist | grep CFBundleIdentifier
