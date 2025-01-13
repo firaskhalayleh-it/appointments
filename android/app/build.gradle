@@ -96,6 +96,13 @@ flutter {
     source '../..'
 }
 
+configurations {
+    all {
+        exclude group: 'com.google.android.play', module: 'core'
+        exclude group: 'com.google.android.play', module: 'core-ktx'
+    }
+}
+
 dependencies {
     implementation platform('com.google.firebase:firebase-bom:32.0.0')
     implementation 'androidx.multidex:multidex:2.0.1'
@@ -103,10 +110,11 @@ dependencies {
     implementation 'com.google.firebase:firebase-messaging'
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
     
-    // Play Core dependencies
-    implementation 'com.google.android.play:core:1.10.3'
+    // Play Core dependencies - Using only new modular versions
     implementation 'com.google.android.play:app-update:2.0.1'
     implementation 'com.google.android.play:app-update-ktx:2.0.1'
     implementation 'com.google.android.play:core-common:2.0.3'
-    implementation 'com.google.android.play:feature-delivery:2.0.1'
+    implementation ('com.google.android.play:feature-delivery:2.0.1') {
+        exclude group: 'com.google.android.play', module: 'core'
+    }
 }
