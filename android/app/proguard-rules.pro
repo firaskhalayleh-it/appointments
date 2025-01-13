@@ -5,28 +5,28 @@
 -keep class io.flutter.view.** { *; }
 -keep class io.flutter.** { *; }
 -keep class io.flutter.plugins.** { *; }
+-keep class io.flutter.embedding.** { *; }
 
 # Firebase
 -keep class com.google.firebase.** { *; }
 -keep class com.google.android.gms.** { *; }
 
-# Facebook
--keep class com.facebook.** { *; }
-
 # Play Core
 -keep class com.google.android.play.core.** { *; }
--keep class com.google.android.play.core.splitcompat.** { *; }
--keep class com.google.android.play.core.splitinstall.** { *; }
 -keep class com.google.android.play.core.tasks.** { *; }
+-keep interface com.google.android.play.core.tasks.** { *; }
+-keep class com.google.android.play.core.install.** { *; }
+-keep class com.google.android.play.core.splitinstall.** { *; }
+-keep class com.google.android.play.core.appupdate.** { *; }
 -keep class com.google.android.play.core.common.** { *; }
--keep class com.google.android.play.core.listener.** { *; }
+-keep class com.google.android.play.core.splitcompat.** { *; }
+-keep class com.google.android.play.core.review.** { *; }
+-keep class com.google.android.play.core.tasks.OnFailureListener { *; }
+-keep class com.google.android.play.core.tasks.OnSuccessListener { *; }
+-keep class com.google.android.play.core.tasks.Task { *; }
 
 # Multidex
--keep class com.android.tools.ir.** { *; }
 -keep class androidx.multidex.** { *; }
 
-# Common
--keepattributes *Annotation*
--keepattributes SourceFile,LineNumberTable
--keepattributes Signature
--keepattributes Exceptions
+# Facebook
+-keep class com.facebook.** { *; }
