@@ -5,7 +5,7 @@ ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 source 'https://cdn.cocoapods.org/'
 
-require File.join(File.dirname(File.realpath('/Users/runner/hostedtoolcache/flutter/stable-3.27.1-arm64')), 'packages', 'flutter_tools', 'bin', 'podhelper')
+require File.join(File.dirname(File.realpath('/Users/runner/hostedtoolcache/flutter/stable-3.27.1-arm64')), 'packages', 'flutter_tools', 'bin')
 
 target 'Runner' do
   use_frameworks!
