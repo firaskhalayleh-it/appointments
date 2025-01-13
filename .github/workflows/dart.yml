@@ -67,10 +67,6 @@ jobs:
           flutter test || echo "No tests found"
           echo "passed" > .test_status
 
-  # Previous jobs remain the same...
-
-  # Previous jobs remain the same...
-
   build-ios:
     runs-on: macos-latest
     needs: test-and-check
@@ -86,7 +82,6 @@ jobs:
           echo "$FIREBASE_CONFIG_BASE64" | base64 --decode > ios/Runner/GoogleService-Info.plist
           
       - name: Setup Flutter
-        if: steps.build_cache.outputs.cache-hit != 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.27.1'
@@ -94,29 +89,43 @@ jobs:
           
       - name: Add Firebase SDK Package
         run: |
-          cd ios
-          # Add Firebase SDK using Swift Package Manager
-          cat << 'EOF' > firebase_package.rb
-          require 'xcodeproj'
-          
-          project_path = 'Runner.xcodeproj'
-          project = Xcodeproj::Project.open(project_path)
-          
-          # Add Swift Package
-          package_url = 'https://github.com/firebase/firebase-ios-sdk'
-          package_requirement = XCRemoteSwiftPackageReference::VersionRequirement.new('.upToNextMajor', '10.20.0')
-          package_ref = XCRemoteSwiftPackageReference.new(project,
-            repositoryURL: package_url,
-            requirement: package_requirement)
-          
-          # Add to project
-          project.root_object.package_references << package_ref
-          
-          # Save changes
-          project.save
-          EOF
-          
-          ruby firebase_package.rb
+            cd ios
+            # Add Firebase SDK using Swift Package Manager
+            cat << 'EOF' > firebase_package.rb
+            require 'xcodeproj'
+            
+            project_path = 'Runner.xcodeproj'
+            project = Xcodeproj::Project.open(project_path)
+            
+            # Get the main target
+            target = project.targets.first
+            
+            # Add Swift Package
+            package_url = 'https://github.com/firebase/firebase-ios-sdk'
+            
+            # Create package reference
+            package_ref = project.new_package_reference
+            package_ref.repositoryURL = package_url
+            package_ref.requirement = { kind: 'upToNextMajor', minimumVersion: '10.20.0' }
+            
+            # Add to project
+            project.root_object.package_references << package_ref
+            
+            # Add package product dependencies to target
+            ['FirebaseAuth', 'FirebaseFirestore', 'FirebaseStorage'].each do |product|
+              dependency = project.new_package_product_dependency
+              dependency.package_reference = package_ref
+              dependency.product_name = product
+              target.package_product_dependencies << dependency
+            end
+            
+            # Save changes
+            project.save
+            
+            puts "Successfully added Firebase SDK package"
+            EOF
+            
+            ruby firebase_package.rb
           
       - name: Setup Ruby and CocoaPods
         uses: ruby/setup-ruby@v1
