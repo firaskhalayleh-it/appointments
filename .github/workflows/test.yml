@@ -7,6 +7,12 @@ on:
         description: 'Version tag to test (e.g., v1.5)'
         required: true
         default: 'latest'
+      repository:
+        description: 'Repository (e.g., owner/repo)'
+        required: true
+      github_token:
+        description: 'GitHub Token for API access'
+        required: true
 
 jobs:
   test-on-simulator:
@@ -15,16 +21,52 @@ jobs:
     steps:
       - name: Download Release IPA
         run: |
-          if [ "${{ github.event.inputs.version_tag }}" == "latest" ]; then
+          # Set GitHub API token for authentication
+          GITHUB_TOKEN="${{ inputs.github_token }}"
+          REPO="${{ inputs.repository }}"
+          
+          echo "Fetching release information..."
+          
+          if [ "${{ inputs.version_tag }}" == "latest" ]; then
             # Get latest release
-            RELEASE_URL=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.assets[0].browser_download_url')
+            RELEASE_INFO=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/$REPO/releases/latest")
           else
             # Get specific version
-            RELEASE_URL=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.event.inputs.version_tag }} | jq -r '.assets[0].browser_download_url')
+            RELEASE_INFO=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/$REPO/releases/tags/${{ inputs.version_tag }}")
           fi
           
+          # Check if release info was retrieved successfully
+          if [ -z "$RELEASE_INFO" ]; then
+            echo "Failed to fetch release information"
+            exit 1
+          fi
+          
+          # Extract download URL for IPA
+          RELEASE_URL=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name | endswith(".ipa")) | .browser_download_url')
+          
+          if [ -z "$RELEASE_URL" ] || [ "$RELEASE_URL" == "null" ]; then
+            echo "No IPA file found in release assets"
+            echo "Available assets:"
+            echo "$RELEASE_INFO" | jq -r '.assets[].name'
+            exit 1
+          fi
+          
+          echo "Downloading IPA from: $RELEASE_URL"
           mkdir -p ios-app
-          curl -L -o ios-app/FlutterIpaExport.ipa "$RELEASE_URL"
+          curl -L -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/octet-stream" \
+            -o ios-app/FlutterIpaExport.ipa "$RELEASE_URL"
+          
+          # Verify download
+          if [ ! -f ios-app/FlutterIpaExport.ipa ]; then
+            echo "Failed to download IPA file"
+            exit 1
+          fi
+          
+          echo "IPA file downloaded successfully"
+          ls -lh ios-app/FlutterIpaExport.ipa
 
       - name: Extract IPA and Prepare for Simulator
         run: |
@@ -123,6 +165,7 @@ jobs:
           
           # Clear any existing installation
           echo "Removing any existing app installation..."
+          BUNDLE_ID=$(plutil -p ios-app/Runner.app/Info.plist | grep CFBundleIdentifier | awk -F'"' '{print $4}')
           xcrun simctl uninstall $SIMULATOR_UDID $BUNDLE_ID || true
           
           echo "Installing app on simulator..."
@@ -133,8 +176,6 @@ jobs:
             exit 1
           }
           
-          # Verify bundle identifier
-          BUNDLE_ID=$(plutil -p ios-app/Runner.app/Info.plist | grep CFBundleIdentifier | awk -F'"' '{print $4}')
           echo "Bundle ID: $BUNDLE_ID"
           
           echo "Verifying app container..."
@@ -191,6 +232,9 @@ jobs:
           # Monitor app
           echo "Monitoring app for 30 seconds..."
           sleep 30
+          
+          # Kill log process
+          kill $LOG_PID || true
           
           # Capture system log
           xcrun simctl spawn $SIMULATOR_UDID log show --predicate 'processImagePath contains "Runner"' > test-results/system.log
