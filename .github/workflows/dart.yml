@@ -3,140 +3,123 @@ on:
   workflow_dispatch:
 
 jobs:
-  # --- Job 1: Detect iOS SDK, run tests, etc. ---
   test-and-check:
     name: ✅ Test and iOS Version Check
     runs-on: macos-latest
+    outputs:
+      tests_passed: ${{ steps.test_status.outputs.passed }}
     steps:
       - uses: actions/checkout@v3
       
+      # Check if tests have passed before
+      - name: Check Test Cache
+        id: test_cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            .test_status
+          key: test-status-${{ github.sha }}
+          
+      - name: Check Cached Test Status
+        id: test_status
+        if: steps.test_cache.outputs.cache-hit == 'true'
+        run: |
+          if [ -f .test_status ] && [ "$(cat .test_status)" == "passed" ]; then
+            echo "Tests previously passed, skipping..."
+            echo "passed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "passed=false" >> $GITHUB_OUTPUT
+
+      # Only run tests if not cached as passed
       - name: Setup Flutter
+        if: steps.test_status.outputs.passed != 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.27.1'
           channel: 'stable'
           
-      # Verify Flutter installation and path
-      - name: Verify Flutter Installation
-        run: |
-          flutter doctor -v
-          echo "FLUTTER_ROOT=$FLUTTER_ROOT" >> $GITHUB_ENV
-          
-      # STEP 1: Detect iOS SDK version
-      - name: Find iOS SDK version
-        id: find-ios-sdk
-        run: |
-          ios_sdk=$(xcodebuild -showsdks | grep -E "iOS [0-9\.]+" | head -1 | sed -E "s/.*iOS ([0-9\.]+).*/\1/")
-          echo "Found iOS SDK version: $ios_sdk"
-          echo "sdk_version=$ios_sdk" >> $GITHUB_OUTPUT
-          
-      # CACHE STEP #1: Cache Flutter/Dart packages
       - name: Cache pub dependencies
+        if: steps.test_status.outputs.passed != 'true'
         uses: actions/cache@v3
         with:
           path: ~/.pub-cache
           key: ${{ runner.os }}-pubcache-${{ hashFiles('pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pubcache-
+          restore-keys: ${{ runner.os }}-pubcache-
             
       - name: Flutter Pub Get
-        run: |
-          flutter clean
-          flutter pub get
+        if: steps.test_status.outputs.passed != 'true'
+        run: flutter pub get
         
-      # Optional: Show iOS SDKs for debugging
-      - name: Show iOS SDKs
-        run: xcodebuild -showsdks
-        
-      # Use script to ensure test directory
-      - name: Ensure test directory
-        run: |
-          chmod +x setup_tests.sh
-          ./setup_tests.sh
-        shell: bash
-        
-      # Run Flutter tests
       - name: Run Flutter Tests
-        run: flutter test
+        if: steps.test_status.outputs.passed != 'true'
+        run: |
+          flutter test
+          echo "passed" > .test_status
 
-  # --- Job 2: Build and export IPA ---
   build-ios:
     runs-on: macos-latest
     needs: test-and-check
+    if: needs.test-and-check.outputs.tests_passed != 'true'
+    outputs:
+      build_success: ${{ steps.build_status.outputs.success }}
     steps:
       - uses: actions/checkout@v3
       
+      # Check if build exists
+      - name: Check Build Cache
+        id: build_cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            build/ios/iphoneos/FlutterIpaExport.ipa
+          key: ios-build-${{ github.sha }}
+          
+      - name: Skip if Build Exists
+        if: steps.build_cache.outputs.cache-hit == 'true'
+        run: |
+          echo "Build already exists, skipping..."
+          echo "success=true" >> $GITHUB_OUTPUT
+          exit 0
+          
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.27.1'
           channel: 'stable'
           
-      # Verify Flutter installation and path
-      - name: Verify Flutter Installation
-        run: |
-          flutter doctor -v
-          echo "FLUTTER_ROOT=$FLUTTER_ROOT" >> $GITHUB_ENV
-          
-      - name: Setup Ruby and CocoaPods
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.2'
-          
-      - name: Install CocoaPods
-        run: gem install cocoapods
-        
       - name: Cache CocoaPods Installation
         uses: actions/cache@v3
         with:
           path: ios/Pods
           key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pods-
+          restore-keys: ${{ runner.os }}-pods-
             
-      - name: Flutter Pub Get
+      - name: Flutter and Pod Install
         run: |
-          flutter clean
           flutter pub get
-          
-      - name: Pod Install
-        run: |
-          cd ios
-          rm -rf Pods Podfile.lock
-          pod install --repo-update
+          cd ios && pod install --repo-update
         
       - name: Build iOS Release
-        run: flutter build ios --release --no-codesign
-        
-      - name: Create Payload Directory
-        run: mkdir Payload
-        working-directory: build/ios/iphoneos
-        
-      - name: Move App into Payload
-        run: mv Runner.app Payload
-        working-directory: build/ios/iphoneos
-        
-      - name: Zip IPA
-        run: zip -qq -r -9 FlutterIpaExport.ipa Payload
-        working-directory: build/ios/iphoneos
+        id: build_status
+        run: |
+          flutter build ios --release --no-codesign
+          cd build/ios/iphoneos
+          mkdir Payload
+          mv Runner.app Payload
+          zip -qq -r -9 FlutterIpaExport.ipa Payload
+          echo "success=true" >> $GITHUB_OUTPUT
 
-      # Upload IPA as artifact for testing job
-      - name: Upload IPA for Testing
+      - name: Upload IPA
         uses: actions/upload-artifact@v3
         with:
           name: ios-app
           path: build/ios/iphoneos/FlutterIpaExport.ipa
         
-      - name: Upload binaries to release
+      - name: Upload to Release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: build/ios/iphoneos/FlutterIpaExport.ipa
           tag: v1.5.${{ github.run_number }}.${{ github.run_attempt }}
           overwrite: true
-          body: "Built with auto-detected iOS SDK version"
-
-  # --- Job 3: Test IPA on Simulator ---
-  # Previous jobs remain the same (test-and-check and build-ios)
-
-  
