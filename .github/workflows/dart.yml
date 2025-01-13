@@ -11,7 +11,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      # Check if tests have passed before
       - name: Check Test Cache
         id: test_cache
         uses: actions/cache@v3
@@ -109,34 +108,32 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pods-
             
-      - name: Flutter Pub Get
+      - name: Flutter Setup
         if: steps.build_cache.outputs.cache-hit != 'true'
         run: |
           flutter clean
           flutter pub get
           
-      - name: Fix Podfile
+      - name: Debug Flutter Environment
         if: steps.build_cache.outputs.cache-hit != 'true'
         run: |
-          cd ios
-          FLUTTER_ROOT=$(which flutter | xargs dirname | xargs dirname)
-          echo "Found Flutter root at: $FLUTTER_ROOT"
-          if [ ! -f "Podfile" ]; then
-            echo "Error: Podfile not found"
-            exit 1
-          fi
-          sed -i '' "s|require.*podhelper.*|require File.join(File.dirname(File.realpath('$FLUTTER_ROOT')), 'packages', 'flutter_tools', 'bin', 'podhelper')|" Podfile
-          echo "Modified Podfile contents:"
-          cat Podfile
+          echo "FLUTTER_ROOT: $FLUTTER_ROOT"
+          echo "PWD: $(pwd)"
+          flutter doctor -v
+          echo "Looking for podhelper.rb:"
+          find $FLUTTER_ROOT -name "podhelper.rb" 2>/dev/null || true
+          find . -name "podhelper.rb" 2>/dev/null || true
           
       - name: Pod Install
         if: steps.build_cache.outputs.cache-hit != 'true'
         run: |
           cd ios
           rm -rf Pods Podfile.lock
+          pod repo update
           pod install --repo-update
         env:
           LANG: en_US.UTF-8
+          FLUTTER_ROOT: ${{ env.FLUTTER_ROOT }}
           
       - name: Build iOS Release
         if: steps.build_cache.outputs.cache-hit != 'true'
