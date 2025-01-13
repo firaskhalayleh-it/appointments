@@ -4,6 +4,9 @@ ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 source 'https://cdn.cocoapods.org/'
 
+# Flutter podhelper
+require File.join(File.dirname(`which flutter`), 'packages', 'flutter_tools', 'bin', 'podhelper')
+
 target 'Runner' do
   use_frameworks!
   use_modular_headers!
