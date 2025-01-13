@@ -69,6 +69,8 @@ jobs:
 
   # Previous jobs remain the same...
 
+  # Previous jobs remain the same...
+
   build-ios:
     runs-on: macos-latest
     needs: test-and-check
@@ -90,47 +92,41 @@ jobs:
           flutter-version: '3.27.1'
           channel: 'stable'
           
-      - name: Setup Swift Package Manager Dependencies
+      - name: Add Firebase SDK Package
         run: |
           cd ios
-          xcodebuild -resolvePackageDependencies \
-            -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -clonedSourcePackagesDirPath SourcePackages \
-            -package-url https://github.com/firebase/firebase-ios-sdk \
-            -package-version 10.20.0  # Use the latest stable version
-            
+          # Add Firebase SDK using Swift Package Manager
+          cat << 'EOF' > firebase_package.rb
+          require 'xcodeproj'
+          
+          project_path = 'Runner.xcodeproj'
+          project = Xcodeproj::Project.open(project_path)
+          
+          # Add Swift Package
+          package_url = 'https://github.com/firebase/firebase-ios-sdk'
+          package_requirement = XCRemoteSwiftPackageReference::VersionRequirement.new('.upToNextMajor', '10.20.0')
+          package_ref = XCRemoteSwiftPackageReference.new(project,
+            repositoryURL: package_url,
+            requirement: package_requirement)
+          
+          # Add to project
+          project.root_object.package_references << package_ref
+          
+          # Save changes
+          project.save
+          EOF
+          
+          ruby firebase_package.rb
+          
       - name: Setup Ruby and CocoaPods
-        if: steps.build_cache.outputs.cache-hit != 'true'
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
           bundler-cache: true
           
-      - name: Cache CocoaPods
-        if: steps.build_cache.outputs.cache-hit != 'true'
-        uses: actions/cache@v3
-        with:
-          path: |
-            ios/Pods
-            ~/Library/Caches/CocoaPods
-            ~/.cocoapods
-          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pods-
-            
-      - name: Flutter Setup
-        if: steps.build_cache.outputs.cache-hit != 'true'
+      - name: Install xcodeproj gem
         run: |
-          flutter clean
-          flutter pub get
-          
-      - name: Debug Environment
-        run: |
-          echo "Checking Firebase config:"
-          ls -la ios/Runner/GoogleService-Info.plist || echo "Firebase config missing!"
-          echo "Checking Swift packages:"
-          ls -la ios/SourcePackages || echo "No Swift packages found!"
+          gem install xcodeproj
           
       - name: Pod Install
         run: |
@@ -141,6 +137,13 @@ jobs:
         env:
           LANG: en_US.UTF-8
           FLUTTER_ROOT: ${{ env.FLUTTER_ROOT }}
+          
+      - name: Debug Environment
+        run: |
+          echo "Checking Firebase config:"
+          ls -la ios/Runner/GoogleService-Info.plist || echo "Firebase config missing!"
+          echo "Checking project configuration:"
+          ls -la ios/Runner.xcodeproj
           
       - name: Build iOS Release
         if: steps.build_cache.outputs.cache-hit != 'true'
