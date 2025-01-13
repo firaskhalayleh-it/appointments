@@ -121,7 +121,12 @@ jobs:
           cd ios
           FLUTTER_ROOT=$(which flutter | xargs dirname | xargs dirname)
           echo "Found Flutter root at: $FLUTTER_ROOT"
+          if [ ! -f "Podfile" ]; then
+            echo "Error: Podfile not found"
+            exit 1
+          fi
           sed -i '' "s|require.*podhelper.*|require File.join(File.dirname(File.realpath('$FLUTTER_ROOT')), 'packages', 'flutter_tools', 'bin', 'podhelper')|" Podfile
+          echo "Modified Podfile contents:"
           cat Podfile
           
       - name: Pod Install
