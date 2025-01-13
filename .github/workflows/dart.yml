@@ -11,14 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      # Check if tests have passed before
-      - name: Check Test Cache
+      # Use script to ensure test directory
+      - name: Ensure test directory
         id: test_cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            .test_status
-          key: test-status-${{ github.sha }}
+        run: |
+          chmod +x setup_tests.sh
+          ./setup_tests.sh
+        shell: bash
           
       - name: Check Cached Test Status
         id: test_status
