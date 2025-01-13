@@ -26,14 +26,39 @@
         <string>armv7</string>
     </array>
     
-    <!-- Only Photo Library Permission -->
+    <!-- Permissions -->
     <key>NSPhotoLibraryUsageDescription</key>
     <string>This app needs access to your photos to let you share images for appointments.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>This app needs camera access to take photos for appointments.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>This app needs microphone access for video appointments.</string>
+    
+    <!-- Firebase Configuration -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>com.hebrons.appointments</string>
+            </array>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+        </dict>
+    </array>
     
     <!-- Essential UI Settings -->
     <key>UISupportedInterfaceOrientations</key>
     <array>
         <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     
     <!-- Required Base Settings -->
@@ -47,5 +72,9 @@
     <true/>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
+    
+    <!-- Additional Security Settings -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
 </dict>
 </plist>
