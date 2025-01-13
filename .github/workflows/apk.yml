@@ -1,10 +1,11 @@
 name: Flutter CI/CD
 
 on:
+  # Adjust if your default branch is "main". Otherwise, keep "master" if that’s truly your active branch.
   push:
-    branches: [ "master" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "main" ]
 
 jobs:
   test:
@@ -12,23 +13,32 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - uses: actions/checkout@v3
-      
+      # ----- 1. Checkout the repository -----
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          # Setting fetch-depth to 0 fetches all history so you can do full clones or other Git operations
+          fetch-depth: 0
+
+      # ----- 2. Set up Java JDK 11 -----
       - name: Set up Java
         uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
           java-version: '11'
       
+      # ----- 3. Set up Flutter -----
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.16.0'
           channel: 'stable'
-      
+
+      # ----- 4. Get dependencies -----
       - name: Get dependencies
         run: flutter pub get
-        
+
+      # ----- 5. Run tests -----
       - name: Run tests
         run: flutter test
 
@@ -38,43 +48,53 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - uses: actions/checkout@v3
-      
+      # ----- 1. Checkout the repository again -----
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      # ----- 2. Set up Java JDK 11 -----
       - name: Set up Java
         uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
           java-version: '11'
       
+      # ----- 3. Set up Flutter -----
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.16.0'
           channel: 'stable'
       
+      # ----- 4. Get dependencies -----
       - name: Get dependencies
         run: flutter pub get
 
-      # Decode base64 key.properties and keystore files
+      # ----- 5. Decode base64 key.properties and keystore files -----
       - name: Decode android key.properties
+        # Make sure you have stored your KEY_PROPERTIES and KEYSTORE in Actions secrets
         run: |
           echo "${{ secrets.KEY_PROPERTIES }}" > android/key.properties
           echo "${{ secrets.KEYSTORE }}" > android/app/my-release-key.jks.base64
           base64 -d android/app/my-release-key.jks.base64 > android/app/my-release-key.jks
-      
+
+      # ----- 6. Build APK (release mode) -----
       - name: Build APK
         run: flutter build apk --release
 
-      # Upload APK as artifact
+      # ----- 7. Upload APK as an artifact -----
       - name: Upload APK
         uses: actions/upload-artifact@v3
         with:
           name: release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
 
-      # Optional: Create a GitHub release with the APK
+      # ----- 8. (Optional) Create a GitHub Release with the built APK -----
       - name: Create Release
-        if: github.ref == 'refs/heads/main' # Only create release from main branch
+        # If you want to release from "main", keep as-is. If your default branch is "master," change to 'refs/heads/master'.
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v1
         with:
           files: build/app/outputs/flutter-apk/app-release.apk
