@@ -6,7 +6,7 @@ import 'package:get/get.dart';
 
 class ThemeController extends GetxController {
   final FlutterSecureStorage _storage = Get.find<FlutterSecureStorage>();
-  final isDarkMode = false.obs;
+  final _isDarkMode = false.obs;
 
   @override
   void onInit() {
@@ -14,16 +14,31 @@ class ThemeController extends GetxController {
     loadTheme();
   }
 
+
+  bool get isDarkMode => _isDarkMode.value;
+  
+  Future<void> initTheme() async {
+    try {
+      final storage = Get.find<FlutterSecureStorage>();
+      final savedTheme = await storage.read(key: 'theme_mode');
+      _isDarkMode.value = savedTheme == 'dark';
+    } catch (e) {
+      debugPrint('Theme initialization error: $e');
+      // Use default light theme
+      _isDarkMode.value = false;
+    }
+  }
+
   /// Loads the theme preference from secure storage
   Future<void> loadTheme() async {
     final storedTheme = await _storage.read(key: 'isDarkMode') ?? 'false';
-    isDarkMode.value = storedTheme == 'true';
+    _isDarkMode.value = storedTheme == 'true';
   }
 
   /// Toggles the theme between light and dark modes
   Future<void> toggleTheme() async {
-    isDarkMode.value = !isDarkMode.value;
-    await _storage.write(key: 'isDarkMode', value: isDarkMode.value.toString());
-    Get.changeThemeMode(isDarkMode.value ? ThemeMode.dark : ThemeMode.light);
+    _isDarkMode.value = !_isDarkMode.value;
+    await _storage.write(key: 'isDarkMode', value: _isDarkMode.value.toString());
+    Get.changeThemeMode(_isDarkMode.value ? ThemeMode.dark : ThemeMode.light);
   }
 }

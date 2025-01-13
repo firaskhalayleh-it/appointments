@@ -1,9 +1,24 @@
 import 'package:appointments/app/data/appointment_model.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AppointmentsService extends GetxService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+
+  Future<void> init() async {
+    try {
+      // Initialize the Firestore instance
+      // ignore: deprecated_member_use
+      await _firestore.enablePersistence();
+
+      
+    } catch (e) {
+      debugPrint('AppointmentsService initialization error: $e');
+      rethrow;
+    }
+  }
 
   /// Fetch appointments for a specific city with real-time updates
   Stream<List<AppointmentModel>> fetchAppointments(String city) {
