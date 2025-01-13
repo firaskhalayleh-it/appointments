@@ -10,7 +10,7 @@ jobs:
       tests_passed: ${{ steps.test_status.outputs.passed }}
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Check Test Cache
         id: test_cache
         uses: actions/cache@v3
@@ -18,7 +18,7 @@ jobs:
           path: |
             .test_status
           key: test-status-${{ github.sha }}
-          
+
       - name: Check Cached Test Status
         id: test_status
         if: steps.test_cache.outputs.cache-hit == 'true'
@@ -34,14 +34,14 @@ jobs:
         if: steps.test_status.outputs.passed != 'true'
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.1'
-          channel: 'stable'
-          
+          flutter-version: "3.27.1"
+          channel: "stable"
+
       - name: Verify Flutter Installation
         if: steps.test_status.outputs.passed != 'true'
         run: |
           flutter doctor -v
-          
+
       - name: Cache pub dependencies
         if: steps.test_status.outputs.passed != 'true'
         uses: actions/cache@v3
@@ -54,13 +54,13 @@ jobs:
           key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
           restore-keys: |
             ${{ runner.os }}-pub-
-            
+
       - name: Flutter Pub Get
         if: steps.test_status.outputs.passed != 'true'
         run: |
           flutter clean
           flutter pub get
-          
+
       - name: Run Flutter Tests
         if: steps.test_status.outputs.passed != 'true'
         run: |
@@ -73,70 +73,114 @@ jobs:
     if: always()
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Setup Firebase Config
         env:
           FIREBASE_CONFIG_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}
         run: |
           echo "Setting up Firebase configuration..."
           echo "$FIREBASE_CONFIG_BASE64" | base64 --decode > ios/Runner/GoogleService-Info.plist
-          
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.1'
-          channel: 'stable'
-          
+          flutter-version: "3.27.1"
+          channel: "stable"
+
       - name: Add Firebase SDK Package
         run: |
-            cd ios
-            # Add Firebase SDK using Swift Package Manager
-            cat << 'EOF' > firebase_package.rb
-            require 'xcodeproj'
-            
+          cd ios
+          cat << 'EOF' > firebase_package.rb
+          require 'xcodeproj'
+
+          begin
             project_path = 'Runner.xcodeproj'
             project = Xcodeproj::Project.open(project_path)
             
             # Get the main target
             target = project.targets.first
+            puts "Found target: #{target.name}"
             
-            # Add Swift Package
-            package_url = 'https://github.com/firebase/firebase-ios-sdk'
+            # Add Swift Package dependency
+            package_configs = {
+              'name' => 'firebase-ios-sdk',
+              'url' => 'https://github.com/firebase/firebase-ios-sdk',
+              'version' => '10.20.0'
+            }
             
-            # Create package reference
-            package_ref = project.new_package_reference
-            package_ref.repositoryURL = package_url
-            package_ref.requirement = { kind: 'upToNextMajor', minimumVersion: '10.20.0' }
+            # Add to Package.swift dependencies
+            dependencies_phase = project.objects.find { |obj| obj.is_a?(Xcodeproj::Project::Object::PBXFrameworksBuildPhase) }
             
-            # Add to project
-            project.root_object.package_references << package_ref
+            # Create Swift Package reference
+            ref = project.root_object.add_reference(
+              "#{package_configs['url']}", 
+              'Package Dependency',
+              Xcodeproj::Project::Object::PBXFileReference::EXPLICIT_FILE_TYPE_SWIFT_PACKAGE
+            )
             
-            # Add package product dependencies to target
-            ['FirebaseAuth', 'FirebaseFirestore', 'FirebaseStorage'].each do |product|
-              dependency = project.new_package_product_dependency
-              dependency.package_reference = package_ref
-              dependency.product_name = product
-              target.package_product_dependencies << dependency
+            # Add build configuration
+            project.build_configurations.each do |config|
+              config.build_settings['SWIFT_PACKAGE_PATHS'] ||= []
+              config.build_settings['SWIFT_PACKAGE_PATHS'] << ref.path
             end
             
-            # Save changes
+            # Save the project
             project.save
             
             puts "Successfully added Firebase SDK package"
+          rescue => e
+            puts "Error: #{e.message}"
+            puts e.backtrace
+            exit 1
+          end
+          EOF
+
+          ruby firebase_package.rb
+
+          - name: Setup Swift Package Manager
+          run: |
+            cd ios
+            cat << 'EOF' > Package.swift
+            // swift-tools-version:5.5
+            import PackageDescription
+
+            let package = Package(
+                name: "Runner",
+                platforms: [.iOS(.v13)],
+                dependencies: [
+                    .package(url: "https://github.com/firebase/firebase-ios-sdk.git", from: "10.20.0")
+                ],
+                targets: [
+                    .target(
+                        name: "Runner",
+                        dependencies: [
+                            .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
+                            .product(name: "FirebaseFirestore", package: "firebase-ios-sdk"),
+                            .product(name: "FirebaseStorage", package: "firebase-ios-sdk")
+                        ]
+                    )
+                ]
+            )
             EOF
-            
-            ruby firebase_package.rb
-          
+
+      - name: Update Package Dependencies
+        run: |
+          cd ios
+          xcodebuild -resolvePackageDependencies \
+            -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -clonedSourcePackagesDirPath SourcePackages
+
       - name: Setup Ruby and CocoaPods
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.2'
+          ruby-version: "3.2"
           bundler-cache: true
-          
+
       - name: Install xcodeproj gem
         run: |
           gem install xcodeproj
-          
+
       - name: Pod Install
         run: |
           cd ios
@@ -146,19 +190,19 @@ jobs:
         env:
           LANG: en_US.UTF-8
           FLUTTER_ROOT: ${{ env.FLUTTER_ROOT }}
-          
+
       - name: Debug Environment
         run: |
           echo "Checking Firebase config:"
           ls -la ios/Runner/GoogleService-Info.plist || echo "Firebase config missing!"
           echo "Checking project configuration:"
           ls -la ios/Runner.xcodeproj
-          
+
       - name: Build iOS Release
         if: steps.build_cache.outputs.cache-hit != 'true'
         run: |
           flutter build ios --release --no-codesign
-          
+
           cd build/ios/iphoneos
           mkdir -p Payload
           mv Runner.app Payload/

@@ -1,68 +1,28 @@
 platform :ios, '13.0'
 
-# Disable CocoaPods stats for faster builds.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 source 'https://cdn.cocoapods.org/'
 
-# Find podhelper.rb in the GitHub Actions environment
-def find_podhelper
-  flutter_root = ENV['FLUTTER_ROOT'] || '/Users/runner/hostedtoolcache/flutter/stable-3.27.1-arm64'
-  
-  possible_paths = [
-    File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'),
-    File.join(flutter_root, '.ios', 'Flutter', 'podhelper.rb'),
-    File.join(File.dirname(__FILE__), '..', '.ios', 'Flutter', 'podhelper.rb'),
-    File.join(File.dirname(__FILE__), '..', 'Flutter', 'podhelper.rb')
-  ]
-  
-  found_path = possible_paths.find { |path| File.exist?(path) }
-  
-  unless found_path
-    puts "Available paths in Flutter root:"
-    system("ls -R #{flutter_root}")
-    raise "Could not find podhelper.rb in any of the expected locations"
-  end
-  
-  found_path
-end
-
-begin
-  require find_podhelper
-rescue LoadError => e
-  puts "Error loading podhelper: #{e.message}"
-  puts "Flutter root: #{ENV['FLUTTER_ROOT']}"
-  puts "Current directory: #{Dir.pwd}"
-  raise
-end
-
 target 'Runner' do
   use_frameworks!
   use_modular_headers!
-
-  # Firebase Pods
-  pod 'FirebaseCore'
-  pod 'Firebase/Auth'
-  pod 'Firebase/Storage'
-  pod 'Firebase/Firestore'
-
+  
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  
+  # Note: Firebase will be managed by Swift Package Manager
+  # Only add other pods here if needed
 end
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
-
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
-
-      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
-        '$(inherited)',
-        'PERMISSION_CAMERA=1',
-        'PERMISSION_PHOTOS=1',
-        'PERMISSION_PHOTOS_ADD_ONLY=1'
-      ]
-
+      config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+      
+      # Enable Swift Package Manager
+      config.build_settings['SWIFT_VERSION'] = '5.0'
       config.build_settings['ENABLE_BITCODE'] = 'NO'
     end
   end
