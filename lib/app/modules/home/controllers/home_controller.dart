@@ -1,6 +1,8 @@
 import 'dart:async';
-
+import 'package:appointments/app/data/appointment_model.dart';
+import 'package:appointments/app/modules/appointments/controllers/appointments_controller.dart';
 import 'package:appointments/app/modules/profile/controllers/profile_controller.dart';
+import 'package:appointments/app/services/notification_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
@@ -11,8 +13,12 @@ class HomeController extends GetxController {
 
   final _citiesWithAppointments = <Map<String, dynamic>>[].obs;
   final _filteredCitiesWithAppointments = <Map<String, dynamic>>[].obs;
+  final _searchedAppointments = <AppointmentModel>[].obs;
+  final isLoading = false.obs;
+  final isSearching = false.obs;
 
   StreamSubscription<QuerySnapshot>? _citiesSubscription;
+  Timer? _debounceTimer;
 
   @override
   void onInit() {
@@ -20,6 +26,7 @@ class HomeController extends GetxController {
     listenToCities();
     Get.put(ProfileController());
     searchController.addListener(() {
+      _onSearchChanged();
       filterCities(searchController.text);
     });
   }
@@ -28,11 +35,117 @@ class HomeController extends GetxController {
   void onClose() {
     searchController.dispose();
     _citiesSubscription?.cancel();
+    _debounceTimer?.cancel();
+    Get.isRegistered<AppointmentsController>()
+        ? Get.delete<AppointmentsController>()
+        : null;
     super.onClose();
   }
 
   List<Map<String, dynamic>> get filteredCitiesWithAppointments =>
       _filteredCitiesWithAppointments;
+
+  List<AppointmentModel> get searchedAppointments => _searchedAppointments;
+
+  void _onSearchChanged() {
+    _debounceTimer?.cancel();
+    if (searchController.text.isNotEmpty) {
+      isSearching.value = true;
+    }
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      performSearch(searchController.text);
+    });
+  }
+
+  Future<void> performSearch(String query) async {
+    if (query.isEmpty) {
+      isSearching.value = false;
+      _filteredCitiesWithAppointments.value =
+          List.from(_citiesWithAppointments);
+      _searchedAppointments.clear();
+      return;
+    }
+
+    isLoading.value = true;
+    isSearching.value = true;
+
+    try {
+      // Search cities first
+      _filteredCitiesWithAppointments.value = _citiesWithAppointments
+          .where((city) => city['name']
+              .toString()
+              .toLowerCase()
+              .contains(query.toLowerCase()))
+          .toList();
+
+      // Search for customer names with case-insensitive partial match
+      final customerNameSnapshot = await _firestore
+          .collection('appointments')
+          .orderBy('customerName')
+          .startAt([query.toLowerCase()]).endAt(
+              [query.toLowerCase() + '\uf8ff']).get();
+
+      // Search for phone numbers with partial match
+      final phoneSnapshot = await _firestore
+          .collection('appointments')
+          .orderBy('phoneNumber')
+          .startAt([query]).endAt([query + '\uf8ff']).get();
+
+      final Set<String> addedIds = {};
+      final List<AppointmentModel> appointments = [];
+
+      // Helper function to add appointments while avoiding duplicates
+      void processSnapshot(QuerySnapshot snapshot) {
+        for (var doc in snapshot.docs) {
+          if (!addedIds.contains(doc.id)) {
+            addedIds.add(doc.id);
+            final data = doc.data() as Map<String, dynamic>;
+            appointments.add(AppointmentModel.fromMap(data, doc.id));
+          }
+        }
+      }
+
+      // Process both search results
+      processSnapshot(customerNameSnapshot);
+      processSnapshot(phoneSnapshot);
+
+      // Sort appointments by date (newest first)
+      appointments.sort((a, b) =>
+          DateTime.parse(b.dateTime).compareTo(DateTime.parse(a.dateTime)));
+
+      _searchedAppointments.value = appointments;
+
+      // Update search state based on results
+      isSearching.value = appointments.isNotEmpty || query.isNotEmpty;
+    } catch (e) {
+      print('Search error: $e');
+      Get.snackbar(
+        'error'.tr,
+        '${'searchError'.tr}: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      _searchedAppointments.clear();
+      isSearching.value = false;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  void filterCities(String query) {
+    if (query.isEmpty) {
+      _filteredCitiesWithAppointments.value =
+          List.from(_citiesWithAppointments);
+      isSearching.value = false;
+    } else {
+      _filteredCitiesWithAppointments.value = _citiesWithAppointments
+          .where((city) => city['name']
+              .toString()
+              .toLowerCase()
+              .contains(query.toLowerCase()))
+          .toList();
+    }
+  }
 
   void listenToCities() {
     _citiesSubscription = _firestore.collection('cities').snapshots().listen(
@@ -45,7 +158,9 @@ class HomeController extends GetxController {
         }).toList();
 
         _citiesWithAppointments.value = updatedCitiesData;
-        filterCities(searchController.text);
+        if (!isSearching.value) {
+          _filteredCitiesWithAppointments.value = updatedCitiesData;
+        }
       },
       onError: (e) {
         Get.snackbar(
@@ -58,21 +173,26 @@ class HomeController extends GetxController {
     );
   }
 
-  void filterCities(String query) {
-    if (query.isEmpty) {
-      _filteredCitiesWithAppointments.value =
-          List.from(_citiesWithAppointments);
-    } else {
-      _filteredCitiesWithAppointments.value = _citiesWithAppointments
-          .where((city) =>
-              city['name'].toString().toLowerCase().contains(query.toLowerCase()))
-          .toList();
-    }
+  void onCitySelected(String cityName) {
+    print('Navigating to appointments with city: $cityName');
+    Get.isRegistered<AppointmentsController>()
+        ? Get.delete<AppointmentsController>()
+        : null;
+
+    Get.toNamed('/appointments', arguments: cityName);
+    searchController.clear();
+    _searchedAppointments.clear();
+    isSearching.value = false;
   }
 
-  void onCitySelected(String city) {
-    print('${'selectedCity'.tr}: $city');
-    Get.toNamed('/appointments', arguments: city);
+  void showSearchOverlay() {
+    isSearching.value = true;
+    searchController.clear();
+  }
+
+  void hideSearchOverlay() {
+    isSearching.value = false;
+    searchController.clear();
   }
 
   Future<void> deleteCity(String city) async {
@@ -148,11 +268,11 @@ class HomeController extends GetxController {
                     decoration: InputDecoration(
                       hintText: 'enterCityName'.tr,
                       hintStyle: const TextStyle(color: Colors.white60),
-                      prefixIcon:
-                          const Icon(Icons.location_city, color: Colors.white70),
+                      prefixIcon: const Icon(Icons.location_city,
+                          color: Colors.white70),
                       border: InputBorder.none,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 16),
                     ),
                   ),
                 ),
@@ -221,4 +341,3 @@ class HomeController extends GetxController {
     );
   }
 }
-

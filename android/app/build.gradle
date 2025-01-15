@@ -24,6 +24,7 @@ if (keystorePropsFile.exists()) {
     keystoreProps.load(new FileInputStream(keystorePropsFile))
 }
 
+
 android {
     namespace "com.hebrons.appointments"
     compileSdkVersion flutter.compileSdkVersion

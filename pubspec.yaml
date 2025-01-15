@@ -26,6 +26,9 @@ dependencies:
   firebase_storage: any
   permission_handler: any
   icons_launcher: any
+  firebase_messaging: any
+  flutter_local_notifications: any
+  flutter_phoenix: any
 
 # Path to the app icon for the `icons_launcher` package
 icons_launcher:

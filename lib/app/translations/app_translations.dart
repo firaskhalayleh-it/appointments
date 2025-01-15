@@ -238,6 +238,7 @@ class AppTranslations extends Translations {
           'editAppointment': 'تعديل الموعد',
           'saveChanges': 'حفظ التغييرات',
 
+"searchCityCustomerPhone": "ابحث عن رقم هاتف او اسم العميل",
           // Messages
           'userAdded': 'تم إضافة المستخدم بنجاح.',
           'userUpdated': 'تم تحديث المستخدم بنجاح.',

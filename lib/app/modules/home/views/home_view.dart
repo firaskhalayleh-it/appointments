@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_advanced_drawer/flutter_advanced_drawer.dart';
 import '../controllers/home_controller.dart';
+import '../../../modules/appointments/views/appointment_card.dart';
 import '../../general/custom_drawer.dart';
+import '../../../modules/appointments/controllers/appointments_controller.dart';
 
 class HomeView extends GetView<HomeController> {
   HomeView({super.key});
 
   final _advancedDrawerController = AdvancedDrawerController();
-
+  final _appointmentsController = Get.put(AppointmentsController());
   @override
   Widget build(BuildContext context) {
     return AdvancedDrawer(
@@ -61,60 +63,98 @@ class HomeView extends GetView<HomeController> {
                     ),
                     child: TextField(
                       controller: controller.searchController,
-                      onChanged: controller.filterCities,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: 'search'.tr,
+                        hintText: 'searchCityCustomerPhone'.tr,
                         hintStyle: const TextStyle(color: Colors.white70),
                         prefixIcon: const Icon(Icons.search, color: Colors.white),
+                        suffixIcon: Obx(() => controller.isLoading.value
+                            ? Container(
+                                margin: const EdgeInsets.all(14),
+                                width: 20,
+                                height: 20,
+                                child: const CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor:
+                                      AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : const SizedBox.shrink()),
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 16),
                       ),
                     ),
                   ),
                 ),
 
-                // Cities List
+                // Results List
                 Expanded(
-                  child: Obx(() => ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: controller.filteredCitiesWithAppointments.length,
+                  child: Obx(() {
+                    // Show loading indicator
+                    if (controller.isLoading.value) {
+                      return const Center(
+                          child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ));
+                    }
+
+                    // Show appointments if found
+                    if (controller.searchedAppointments.isNotEmpty) {
+                      return ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        itemCount: controller.searchedAppointments.length,
                         itemBuilder: (context, index) {
-                          final city = controller.filteredCitiesWithAppointments[index];
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: ListTile(
-                              onTap: () => {
-                                controller.onCitySelected(city['name']),
-                                print('City selected: ${city['name']}')
-                              },
-                              onLongPress: () {
-                                _showDeleteConfirmationDialog(context, city['name']);
-                              },
-                              title: Text(
-                                city['name'],
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              subtitle: Text(
-                                '${city['count']} ${'appointments'.tr}${city['count'] != 1 ? ' ' : ''}',
-                                style: const TextStyle(color: Colors.white70),
-                              ),
-                              trailing: const Icon(
-                                Icons.arrow_forward_ios,
-                                color: Colors.white70,
-                                size: 16,
-                              ),
-                            ),
+                          final appointment =
+                              controller.searchedAppointments[index];
+                          return AppointmentCard(
+                            appointment: appointment,
+                            controller: _appointmentsController,
                           );
                         },
-                      )),
+                      );
+                    }
+
+                    // Show cities list
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: controller.filteredCitiesWithAppointments.length,
+                      itemBuilder: (context, index) {
+                        final city =
+                            controller.filteredCitiesWithAppointments[index];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ListTile(
+                            onTap: () => controller.onCitySelected(city['name']),
+                            onLongPress: () {
+                              _showDeleteConfirmationDialog(
+                                  context, city['name']);
+                            },
+                            title: Text(
+                              city['name'],
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '${city['count']} ${'appointments'.tr}${city['count'] != 1 ? ' ' : ''}',
+                              style: const TextStyle(color: Colors.white70),
+                            ),
+                            trailing: const Icon(
+                              Icons.arrow_forward_ios,
+                              color: Colors.white70,
+                              size: 16,
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  }),
                 ),
               ],
             ),

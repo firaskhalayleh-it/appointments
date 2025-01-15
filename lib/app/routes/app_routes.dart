@@ -11,6 +11,7 @@ abstract class Routes {
   static const SETTINGS = _Paths.SETTINGS;
   static const USERS = _Paths.USERS;
   static const USER_DASHBOARD = _Paths.USER_DASHBOARD;
+  static const EDIT_APPOINTMENT = _Paths.EDIT_APPOINTMENT;
 }
 
 abstract class _Paths {
@@ -23,4 +24,5 @@ abstract class _Paths {
   static const SETTINGS = '/settings';
   static const USERS = '/users';
   static const USER_DASHBOARD = '/user-dashboard';
+  static const EDIT_APPOINTMENT = '/edit-appointment';
 }

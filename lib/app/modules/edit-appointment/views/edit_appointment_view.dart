@@ -2,20 +2,18 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import '../controllers/add_appointment_controller.dart';
+import '../controllers/edit_appointment_controller.dart';
 import 'package:intl/intl.dart';
 
-class AddAppointmentView extends GetView<AddAppointmentController> {
-  const AddAppointmentView({super.key});
+class EditAppointmentView extends GetView<EditAppointmentController> {
+  const EditAppointmentView({super.key});
 
   @override
   Widget build(BuildContext context) {
-    Get.put<AddAppointmentController>(AddAppointmentController());
-
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'addAppointment'.tr,
+          'editAppointment'.tr,
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         backgroundColor: Colors.blue.shade900,
@@ -45,7 +43,7 @@ class AddAppointmentView extends GetView<AddAppointmentController> {
               child: Column(
                 children: [
                   _buildInputField(
-                    controller: controller.nameController,
+                    controller: controller.customerNameController,
                     label: 'customerName'.tr,
                     icon: Icons.person_outline,
                     validator: (value) =>
@@ -53,7 +51,7 @@ class AddAppointmentView extends GetView<AddAppointmentController> {
                   ),
                   const SizedBox(height: 16),
                   _buildPhoneInputField(
-                    controller: controller.phoneController,
+                    controller: controller.phoneNumberController,
                     label: 'phoneNumber'.tr,
                   ),
                   const SizedBox(height: 16),
@@ -65,17 +63,22 @@ class AddAppointmentView extends GetView<AddAppointmentController> {
                         value?.isEmpty ?? true ? 'serviceRequired'.tr : null,
                   ),
                   const SizedBox(height: 16),
-                  _buildDateTimePicker(
-                    icon: Icons.calendar_today,
-                    title: DateFormat('MMM dd, yyyy').format(controller.selectedDate.value),
-                    onTap: () => _pickDate(context, controller),
-                  ),
+                  Obx(() => _buildDateTimePicker(
+                        icon: Icons.calendar_today,
+                        title: controller.selectedDate.value != null
+                            ? DateFormat('MMM dd, yyyy')
+                                .format(controller.selectedDate.value!)
+                            : 'selectDate'.tr,
+                        onTap: () => _pickDate(context),
+                      )),
                   const SizedBox(height: 16),
-                  _buildDateTimePicker(
-                    icon: Icons.access_time,
-                    title: controller.selectedTime.value.format(context),
-                    onTap: () => _pickTime(context, controller),
-                  ),
+                  Obx(() => _buildDateTimePicker(
+                        icon: Icons.access_time,
+                        title: controller.selectedTime.value != null
+                            ? controller.selectedTime.value!.format(context)
+                            : 'selectTime'.tr,
+                        onTap: () => _pickTime(context),
+                      )),
                   const SizedBox(height: 16),
                   _buildInputField(
                     controller: controller.addressController,
@@ -93,7 +96,7 @@ class AddAppointmentView extends GetView<AddAppointmentController> {
                     maxLines: 3,
                   ),
                   const SizedBox(height: 32),
-                  _buildSubmitButton(controller),
+                  _buildSubmitButton(),
                 ],
               ),
             ),
@@ -246,11 +249,13 @@ class AddAppointmentView extends GetView<AddAppointmentController> {
     );
   }
 
-  Widget _buildSubmitButton(AddAppointmentController controller) {
-    return SizedBox(
+  Widget _buildSubmitButton() {
+    return Obx(() => SizedBox(
       width: double.infinity,
       child: ElevatedButton(
-        onPressed: () => controller.submitAppointment(),
+        onPressed: controller.isLoading.value 
+            ? null 
+            : () => controller.updateAppointment(),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.white,
           foregroundColor: Colors.blue.shade900,
@@ -260,21 +265,30 @@ class AddAppointmentView extends GetView<AddAppointmentController> {
           ),
           elevation: 2,
         ),
-        child: Text(
-          'addAppointment'.tr,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        child: controller.isLoading.value
+            ? SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade900),
+                ),
+              )
+            : Text(
+                'saveChanges'.tr,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
       ),
-    );
+    ));
   }
 
-  Future<void> _pickDate(BuildContext context, AddAppointmentController controller) async {
+  Future<void> _pickDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: controller.selectedDate.value,
+      initialDate: controller.selectedDate.value ?? DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
       builder: (context, child) {
@@ -295,13 +309,14 @@ class AddAppointmentView extends GetView<AddAppointmentController> {
 
     if (picked != null) {
       controller.selectedDate.value = picked;
+      controller.dateController.text = DateFormat('MM/dd/yyyy').format(picked);
     }
   }
 
-  Future<void> _pickTime(BuildContext context, AddAppointmentController controller) async {
+  Future<void> _pickTime(BuildContext context) async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
-      initialTime: controller.selectedTime.value,
+      initialTime: controller.selectedTime.value ?? TimeOfDay.now(),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -320,6 +335,7 @@ class AddAppointmentView extends GetView<AddAppointmentController> {
 
     if (picked != null) {
       controller.selectedTime.value = picked;
+      controller.timeController.text = '${picked.hour}:${picked.minute.toString().padLeft(2, '0')}';
     }
   }
 }

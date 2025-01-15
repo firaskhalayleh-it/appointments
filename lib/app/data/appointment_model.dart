@@ -51,4 +51,28 @@ class AppointmentModel {
       'city': city,
     };
   }
+
+  copyWith ({
+    String? id,
+    String? customerName,
+    String? phoneNumber,
+    String? service,
+    String? dateTime,
+    String? address,
+    String? notes,
+    String? status,
+    String? city,
+  }) {
+    return AppointmentModel(
+      id: id ?? this.id,
+      customerName: customerName ?? this.customerName,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      service: service ?? this.service,
+      dateTime: dateTime ?? this.dateTime,
+      address: address ?? this.address,
+      notes: notes ?? this.notes,
+      status: status ?? this.status,
+      city: city ?? this.city,
+    );
+  }
 }

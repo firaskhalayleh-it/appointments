@@ -124,12 +124,13 @@ class UserDashboardView extends GetView<UserDashboardController> {
                                       fontSize: 16,
                                     ),
                                   ),
+                                  onTap: () =>
+                                      controller.onCitySelected(city['name']),
                                   subtitle: Text(
                                     '${city['count']} ${city['count'] != 1 ? 'appointments'.tr : 'appointment'.tr}',
                                     style:
                                         const TextStyle(color: Colors.white70),
                                   ),
-                                  
                                 ),
                               );
                             },

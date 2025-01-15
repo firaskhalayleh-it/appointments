@@ -384,6 +384,11 @@ class UserDashboardController extends GetxController {
       );
     }
   }
+
+  void onCitySelected(String city) {
+    selectedCity.value = city;
+    Get.toNamed('/appointments',arguments: city);
+  }
 }
 
 

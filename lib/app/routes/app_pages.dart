@@ -4,6 +4,8 @@ import '../modules/add-appointment/bindings/add_appointment_binding.dart';
 import '../modules/add-appointment/views/add_appointment_view.dart';
 import '../modules/appointments/bindings/appointments_binding.dart';
 import '../modules/appointments/views/appointments_view.dart';
+import '../modules/edit-appointment/bindings/edit_appointment_binding.dart';
+import '../modules/edit-appointment/views/edit_appointment_view.dart';
 import '../modules/home/bindings/home_binding.dart';
 import '../modules/home/views/home_view.dart';
 import '../modules/login/bindings/login_binding.dart';
@@ -57,13 +59,18 @@ class AppPages {
     ),
     GetPage(
       name: _Paths.USERS,
-      page: () =>  UsersView(),
+      page: () => UsersView(),
       binding: UsersBinding(),
     ),
     GetPage(
       name: _Paths.USER_DASHBOARD,
       page: () => const UserDashboardView(),
       binding: UserDashboardBinding(),
+    ),
+    GetPage(
+      name: _Paths.EDIT_APPOINTMENT,
+      page: () => const EditAppointmentView(),
+      binding: EditAppointmentBinding(),
     ),
   ];
 }

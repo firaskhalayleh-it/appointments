@@ -16,7 +16,7 @@ class ThemeController extends GetxController {
 
   /// Loads the theme preference from secure storage
   Future<void> loadTheme() async {
-    final storedTheme = await _storage.read(key: 'isDarkMode') ?? 'false';
+    final storedTheme = await _storage.read(key: 'isDarkMode') ?? 'true';
     isDarkMode.value = storedTheme == 'true';
   }
 
@@ -24,6 +24,7 @@ class ThemeController extends GetxController {
   Future<void> toggleTheme() async {
     isDarkMode.value = !isDarkMode.value;
     await _storage.write(key: 'isDarkMode', value: isDarkMode.value.toString());
-    Get.changeThemeMode(isDarkMode.value ? ThemeMode.dark : ThemeMode.light);
+    Get.changeThemeMode(isDarkMode.value ? ThemeMode.dark : ThemeMode.dark);
+    
   }
 }
