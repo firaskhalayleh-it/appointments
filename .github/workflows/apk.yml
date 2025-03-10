@@ -114,7 +114,7 @@ jobs:
           storePassword=${{ secrets.STORE_PASSWORD }}
           keyPassword=${{ secrets.KEY_PASSWORD }}
           keyAlias=${{ secrets.KEY_ALIAS }}
-          storeFile=app/src/my-release-key.jks
+          storeFile=../app/src/my-release-key.jks
           EOL
           
           # Create a temporary file for the base64 content
