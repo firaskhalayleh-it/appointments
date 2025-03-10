@@ -104,20 +104,22 @@ jobs:
 
       # ----- 5. Decode base64 key.properties and keystore files -----
       - name: Decode android key.properties
-        # Make sure you have stored your KEY_PROPERTIES and KEYSTORE in Actions secrets
         run: |
           mkdir -p android/app/src
           echo "${{ secrets.KEY_PROPERTIES }}" > android/key.properties
           
-          # Ensure we're creating the keystore properly from base64
-          echo "${{ secrets.KEYSTORE }}" | base64 --decode > android/app/src/my-release-key.jks
+          # Create a temporary file for the base64 content
+          echo "${{ secrets.KEYSTORE }}" > android/app/src/keystore_base64.txt
           
-          # Verify the keystore was created correctly
-          if [ -f "android/app/src/my-release-key.jks" ]; then
+          # Check if the file is valid base64 before decoding
+          if cat android/app/src/keystore_base64.txt | base64 -d > /dev/null 2>&1; then
+            # If valid, decode it
+            cat android/app/src/keystore_base64.txt | base64 -d > android/app/src/my-release-key.jks
             echo "Keystore file created successfully"
             ls -la android/app/src/my-release-key.jks
           else
-            echo "Failed to create keystore file"
+            echo "Error: KEYSTORE secret is not valid base64. Please ensure it's properly encoded."
+            echo "Try re-encoding your keystore file with: base64 -i your_keystore.jks | tr -d '\n' > keystore_base64.txt"
             exit 1
           fi
 
