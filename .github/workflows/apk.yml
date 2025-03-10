@@ -163,7 +163,16 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 7
 
-      # ----- 10. Create a GitHub Release with the built APK -----
+      # ----- 10. Create Git Tag and Release with the built APK -----
+      - name: Create Git Tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          TAG_NAME="v${{ steps.extract_version.outputs.APP_VERSION }}-${{ github.run_number }}"
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag -a $TAG_NAME -m "Release $TAG_NAME"
+          git push origin $TAG_NAME
+
       - name: Create Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v1
