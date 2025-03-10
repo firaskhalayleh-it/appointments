@@ -108,7 +108,14 @@ jobs:
       - name: Decode android key.properties
         run: |
           mkdir -p android/app/src
-          echo "${{ secrets.KEY_PROPERTIES }}" > android/key.properties
+          
+          # Generate key.properties with Linux-compatible path
+          cat > android/key.properties << EOL
+          storePassword=${{ secrets.STORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=app/src/my-release-key.jks
+          EOL
           
           # Create a temporary file for the base64 content
           echo "${{ secrets.KEYSTORE }}" > android/app/src/keystore_base64.txt
