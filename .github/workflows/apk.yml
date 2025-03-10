@@ -182,10 +182,12 @@ jobs:
       - name: Create Git Tag
         if: github.ref == 'refs/heads/main'
         run: |
-          # Create a clean tag name without any interpolation issues
+          # Create a clean tag name with dots instead of dashes
           VERSION="${{ steps.extract_version.outputs.APP_VERSION }}"
           RUN_NUMBER="${{ github.run_number }}"
-          TAG_NAME="v${VERSION}-${RUN_NUMBER}"
+          # Replace any dashes with dots for valid tag format
+          VERSION_CLEAN=$(echo "$VERSION" | tr '-' '.')
+          TAG_NAME="v${VERSION_CLEAN}.${RUN_NUMBER}"
           echo "Creating tag: $TAG_NAME"
           
           git config --local user.email "action@github.com"
@@ -193,13 +195,14 @@ jobs:
           git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
           git push origin "$TAG_NAME"
 
+      # Also update the release tag name format
       - name: Create Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v1
         with:
           files: build/app/outputs/flutter-apk/app-release.apk
-          tag_name: v${{ steps.extract_version.outputs.APP_VERSION }}-${{ github.run_number }}
-          name: Release v${{ steps.extract_version.outputs.APP_VERSION }}-${{ github.run_number }}
+          tag_name: v${{ steps.extract_version.outputs.APP_VERSION }}.${{ github.run_number }}
+          name: Release v${{ steps.extract_version.outputs.APP_VERSION }}.${{ github.run_number }}
           body: |
             ## Release Notes
             - Version: ${{ steps.extract_version.outputs.APP_VERSION }}
