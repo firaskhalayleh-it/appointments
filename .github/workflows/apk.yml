@@ -182,34 +182,37 @@ jobs:
       - name: Create Git Tag
         if: github.ref == 'refs/heads/main'
         run: |
-          # Create a clean tag name with dots instead of dashes
+          # Clean version string by trimming whitespace and newlines
           VERSION="${{ steps.extract_version.outputs.APP_VERSION }}"
           RUN_NUMBER="${{ github.run_number }}"
-          # Replace any dashes with dots for valid tag format
-          VERSION_CLEAN=$(echo "$VERSION" | tr '-' '.')
-          TAG_NAME="v${VERSION_CLEAN}.${RUN_NUMBER}"
-          echo "Creating tag: $TAG_NAME"
+          
+          # Clean version: trim whitespace, replace dashes, remove newlines
+          VERSION_CLEAN=$(echo "$VERSION" | tr -d '\n' | tr -d '\r' | tr -d ' ' | tr '-' '.')
+          
+          # Create platform-specific tag for Android
+          TAG_NAME="android-v${VERSION_CLEAN}-${RUN_NUMBER}"
+          echo "Creating Android tag: $TAG_NAME"
           
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
+          git tag -a "$TAG_NAME" -m "Android Release $TAG_NAME"
           git push origin "$TAG_NAME"
 
-      # Also update the release tag name format
+      # Update the release tag name format to match the git tag
       - name: Create Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v1
         with:
           files: build/app/outputs/flutter-apk/app-release.apk
-          tag_name: v${{ steps.extract_version.outputs.APP_VERSION }}.${{ github.run_number }}
-          name: Release v${{ steps.extract_version.outputs.APP_VERSION }}.${{ github.run_number }}
+          tag_name: android-v${{ steps.extract_version.outputs.APP_VERSION }}-${{ github.run_number }}
+          name: Android Release v${{ steps.extract_version.outputs.APP_VERSION }} (Build ${{ github.run_number }})
           body: |
-            ## Release Notes
+            ## Android Release Notes
             - Version: ${{ steps.extract_version.outputs.APP_VERSION }}
             - Build: ${{ github.run_number }}
             - Commit: ${{ github.sha }}
             
-            This is an automated release from GitHub Actions.
+            This is an automated Android APK release from GitHub Actions.
           draft: false
           prerelease: false
         env:
