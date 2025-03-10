@@ -182,11 +182,16 @@ jobs:
       - name: Create Git Tag
         if: github.ref == 'refs/heads/main'
         run: |
-          TAG_NAME="v${{ steps.extract_version.outputs.APP_VERSION }}-${{ github.run_number }}"
+          # Create a clean tag name without any interpolation issues
+          VERSION="${{ steps.extract_version.outputs.APP_VERSION }}"
+          RUN_NUMBER="${{ github.run_number }}"
+          TAG_NAME="v${VERSION}-${RUN_NUMBER}"
+          echo "Creating tag: $TAG_NAME"
+          
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git tag -a $TAG_NAME -m "Release $TAG_NAME"
-          git push origin $TAG_NAME
+          git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
+          git push origin "$TAG_NAME"
 
       - name: Create Release
         if: github.ref == 'refs/heads/main'
