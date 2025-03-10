@@ -136,10 +136,25 @@ jobs:
       - name: Extract version from pubspec
         id: extract_version
         run: |
-          # Extract version and replace '+' with '-' for GitHub tag compatibility
-          VERSION=$(grep 'version:' pubspec.yaml | sed 's/version: //' | tr -d ' ' | tr '+' '-')
+          # Try to extract version from pubspec.yaml
+          if grep -q 'version:' pubspec.yaml; then
+            VERSION=$(grep 'version:' pubspec.yaml | sed 's/version: //' | tr -d ' ' | tr '+' '-')
+            echo "Found version in pubspec.yaml: $VERSION"
+          else
+            # Default version if not found
+            VERSION="1.0.0-0"
+            echo "No version found in pubspec.yaml. Using default: $VERSION"
+          fi
+          
+          # Ensure version is valid, use default if extraction produced empty result
+          if [ -z "$VERSION" ]; then
+            VERSION="1.0.0-0"
+            echo "Empty version extracted. Using default: $VERSION"
+          fi
+          
+          # Set the output
           echo "APP_VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Version extracted: $VERSION"
+          echo "Version used: $VERSION"
 
       # ----- 7. Build APK (release mode) -----
       - name: Build APK
@@ -167,22 +182,19 @@ jobs:
       - name: Create Git Tag
         if: github.ref == 'refs/heads/main'
         run: |
-          # Create a sanitized version-based tag name
-          TAG_NAME="v$(echo ${{ steps.extract_version.outputs.APP_VERSION }} | sed 's/[^a-zA-Z0-9._-]/-/g')-${{ github.run_number }}"
-          echo "Creating tag: $TAG_NAME"
-          
+          TAG_NAME="v${{ steps.extract_version.outputs.APP_VERSION }}-${{ github.run_number }}"
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
-          git push origin "$TAG_NAME"
+          git tag -a $TAG_NAME -m "Release $TAG_NAME"
+          git push origin $TAG_NAME
 
       - name: Create Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v1
         with:
           files: build/app/outputs/flutter-apk/app-release.apk
-          tag_name: ${{ format('v{0}-{1}', steps.extract_version.outputs.APP_VERSION, github.run_number) }}
-          name: Release ${{ format('v{0}-{1}', steps.extract_version.outputs.APP_VERSION, github.run_number) }}
+          tag_name: v${{ steps.extract_version.outputs.APP_VERSION }}-${{ github.run_number }}
+          name: Release v${{ steps.extract_version.outputs.APP_VERSION }}-${{ github.run_number }}
           body: |
             ## Release Notes
             - Version: ${{ steps.extract_version.outputs.APP_VERSION }}
