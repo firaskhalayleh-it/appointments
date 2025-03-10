@@ -50,7 +50,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return Obx(() {
       try {
-        final themeController = Get.find<ThemeController>();
+        final themeController = Get.isRegistered<ThemeController>()
+            ? Get.find<ThemeController>()
+            : ThemeController();
         return GetMaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'Appointments',

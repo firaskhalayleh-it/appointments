@@ -29,6 +29,8 @@ dependencies:
   firebase_messaging: any
   flutter_local_notifications: any
   flutter_phoenix: any
+  logging: ^1.3.0
+  mockito: ^5.4.5
 
 # Path to the app icon for the `icons_launcher` package
 icons_launcher:
